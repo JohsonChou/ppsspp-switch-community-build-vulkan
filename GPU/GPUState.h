@@ -615,6 +615,11 @@ public:
 	bool textureFullAlpha;
 	bool vertexFullAlpha;
 
+	// The PSP CPU can only safely modify texture memory between GE sync points.
+	// Entries remember the domain in which they were last hashed so repeated draws
+	// in one domain do not repeatedly hash the same texture.
+	int textureSyncTimeDomain;
+
 	int skipDrawReason;
 
 	UVScale uv;
@@ -697,4 +702,3 @@ class GPUInterface;
 class GPUDebugInterface;
 
 extern GPUStateCache gstate_c;
-

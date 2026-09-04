@@ -42,8 +42,6 @@ enum FramebufferNotification {
 
 // Changes more frequent than this will be considered "frequent" and prevent texture scaling.
 #define TEXCACHE_FRAME_CHANGE_FREQUENT 6
-// Note: only used when hash backoff is disabled.
-#define TEXCACHE_FRAME_CHANGE_FREQUENT_REGAIN_TRUST 33
 
 #define TEXCACHE_MAX_TEXELS_SCALED (256*256)  // Per frame
 
@@ -136,13 +134,10 @@ struct TexCacheEntry {
 		if (texturePtr || textureName || vkTex)
 			Crash();
 	}
-	// After marking STATUS_UNRELIABLE, if it stays the same this many frames we'll trust it again.
-	const static int FRAMES_REGAIN_TRUST = 1000;
-
 	enum TexStatus {
 		STATUS_HASHING = 0x00,
 		STATUS_RELIABLE = 0x01,        // Don't bother rehashing.
-		STATUS_UNRELIABLE = 0x02,      // Always recheck hash.
+		STATUS_UNRELIABLE = 0x02,      // Recheck hash in a later synchronization domain.
 		STATUS_MASK = 0x03,
 
 		STATUS_ALPHA_UNKNOWN = 0x04,
@@ -172,13 +167,15 @@ struct TexCacheEntry {
 
 		STATUS_VIDEO = 0x10000,
 		STATUS_BGRA = 0x20000,
+		// The texture data was changed by the GPU, for example by a block transfer.
+		// Rehash on the next use even if it is in the current sync domain.
+		STATUS_HASH_RECHECK = 0x40000,
 	};
 
 	// TexStatus enum flag combination.
 	u32 status;
 
 	u32 addr;
-	u32 minihash;
 	u8 format;  // GeTextureFormat
 	u8 maxLevel;
 	u16 dim;
@@ -191,8 +188,8 @@ struct TexCacheEntry {
 #ifdef _WIN32
 	void *textureView;  // Used by D3D11 only for the shader resource view.
 #endif
-	int invalidHint;
 	int lastFrame;
+	int lastSyncDomain;
 	int numFrames;
 	int numInvalidated;
 	u32 framesUntilNextFullHash;
@@ -494,10 +491,6 @@ protected:
 		}
 	}
 
-	static inline u32 MiniHash(const u32 *ptr) {
-		return ptr[0];
-	}
-
 	Draw::DrawContext *draw_;
 	Draw2D *draw2D_;
 
@@ -512,7 +505,6 @@ protected:
 
 	int decimationCounter_;
 	int texelsScaledThisFrame_ = 0;
-	int timesInvalidatedAllThisFrame_ = 0;
 	double replacementTimeThisFrame_ = 0;
 	// Recomputed once per frame. Depends FPS and soon also config.
 	double replacementFrameBudgetSeconds_ = 0.5 / 60.0;

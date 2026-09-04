@@ -153,7 +153,10 @@ Arm64JitBackend::LoadStoreArg Arm64JitBackend::PrepareSrc1Address(IRInst inst) {
 			MOVI2R(SCRATCH1, imm);
 			addrArg.regOffset = SCRATCH1;
 			addrArg.useRegisterOffset = true;
-			addrArg.signExtendRegOffset = true;
+			// The register offset is only the W half, extended into the 64-bit base.
+			// A negative displacement from a pointerified register needs sign extension.
+			// A positive PSP address with bit 31 set must stay positive.
+			addrArg.signExtendRegOffset = imm < 0;
 		}
 	}
 

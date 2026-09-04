@@ -644,5 +644,6 @@ private:
 	HistoryBuffer<FrameTimeData, FRAME_TIME_HISTORY_LENGTH> &frameTimeHistory_;
 
 	VKRPipelineLayout *curPipelineLayout_ = nullptr;
+	std::mutex pipelineLayoutsMutex_;
 	std::vector<VKRPipelineLayout *> pipelineLayouts_;
 };

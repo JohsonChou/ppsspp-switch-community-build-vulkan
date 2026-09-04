@@ -1729,6 +1729,7 @@ void finalize_glslang() {
 }
 
 void VulkanDeleteList::Take(VulkanDeleteList &del) {
+	std::lock_guard<std::mutex> lock(del.mutex_);
 	_dbg_assert_(cmdPools_.empty());
 	_dbg_assert_(descPools_.empty());
 	_dbg_assert_(modules_.empty());
@@ -1745,6 +1746,7 @@ void VulkanDeleteList::Take(VulkanDeleteList &del) {
 	_dbg_assert_(framebuffers_.empty());
 	_dbg_assert_(pipelineLayouts_.empty());
 	_dbg_assert_(descSetLayouts_.empty());
+	_dbg_assert_(queryPools_.empty());
 	_dbg_assert_(callbacks_.empty());
 	cmdPools_ = std::move(del.cmdPools_);
 	descPools_ = std::move(del.descPools_);
@@ -1762,12 +1764,14 @@ void VulkanDeleteList::Take(VulkanDeleteList &del) {
 	framebuffers_ = std::move(del.framebuffers_);
 	pipelineLayouts_ = std::move(del.pipelineLayouts_);
 	descSetLayouts_ = std::move(del.descSetLayouts_);
+	queryPools_ = std::move(del.queryPools_);
 	callbacks_ = std::move(del.callbacks_);
 	del.cmdPools_.clear();
 	del.descPools_.clear();
 	del.modules_.clear();
 	del.buffers_.clear();
 	del.buffersWithAllocs_.clear();
+	del.bufferViews_.clear();
 	del.imageViews_.clear();
 	del.imagesWithAllocs_.clear();
 	del.deviceMemory_.clear();
@@ -1778,14 +1782,29 @@ void VulkanDeleteList::Take(VulkanDeleteList &del) {
 	del.framebuffers_.clear();
 	del.pipelineLayouts_.clear();
 	del.descSetLayouts_.clear();
+	del.queryPools_.clear();
 	del.callbacks_.clear();
 }
 
 void VulkanDeleteList::PerformDeletes(VulkanContext *vulkan, VmaAllocator allocator) {
 	int deleteCount = 0;
+	for (;;) {
+		VulkanDeleteList taken;
+		taken.Take(*this);
+		int count = taken.PerformDeletesInternal(vulkan, allocator);
+		if (!count) {
+			break;
+		}
+		deleteCount += count;
+	}
+	deleteCount_ = deleteCount;
+}
+
+int VulkanDeleteList::PerformDeletesInternal(VulkanContext *vulkan, VmaAllocator allocator) {
+	int deleteCount = 0;
 
 	for (auto &callback : callbacks_) {
-		callback.func(vulkan, callback.userdata);
+		callback(vulkan);
 		deleteCount++;
 	}
 	callbacks_.clear();
@@ -1876,7 +1895,7 @@ void VulkanDeleteList::PerformDeletes(VulkanContext *vulkan, VmaAllocator alloca
 		deleteCount++;
 	}
 	queryPools_.clear();
-	deleteCount_ = deleteCount;
+	return deleteCount;
 }
 
 void VulkanContext::GetImageMemoryRequirements(VkImage image, VkMemoryRequirements *mem_reqs, bool *dedicatedAllocation) {

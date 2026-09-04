@@ -177,7 +177,6 @@ void DrawTexturesWindow(ImConfig &cfg, TextureCacheCommon *textureCache) {
 				ImGui::Text("Status: %08x: %s", entry->status, TexStatusToString((TexCacheEntry::TexStatus)(entry->status)).c_str());
 				ImGui::Text("Hash: %08x", entry->fullhash);
 				ImGui::Text("CLUT Hash: %08x", entry->cluthash);
-				ImGui::Text("Minihash: %08x", entry->minihash);
 				ImGui::Text("MaxSeenV: %08x", entry->maxSeenV);
 				if (entry->replacedTexture) {
 					if (ImGui::CollapsingHeader("Replacement", ImGuiTreeNodeFlags_DefaultOpen)) {

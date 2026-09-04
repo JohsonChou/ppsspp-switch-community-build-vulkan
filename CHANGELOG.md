@@ -1,3 +1,31 @@
+# v0.7.1
+
+Maintenance release based on PPSSPP v1.20.4 and the v0.7.0 Switch Vulkan port.
+
+## Gran Turismo Texture Cache
+
+- Backported PPSSPP's synchronization-domain texture hashing behavior.
+  Textures are hashed once per PSP GE synchronization domain instead of on
+  every use.
+- Blocking framebuffer readbacks and GE synchronization operations advance the
+  texture synchronization domain.
+- Block transfers now mark overlapping textures for a targeted rehash. This is
+  the Gran Turismo menu-text update pattern.
+- Enabled the secondary texture cache for all six known Gran Turismo region
+  IDs.
+- Retired the obsolete Lazy Texture Caching setting and its old MiniHash/backoff
+  implementation.
+
+## Vulkan and Runtime Correctness
+
+- Backported targeted Vulkan deferred-deletion and pipeline-layout threading
+  fixes, the depth-transfer barrier correction, and cached format capability
+  queries.
+- Backported ARM64 address sign-extension and savestate state-handling fixes.
+- Bumped the Switch release metadata and artifact version to `0.7.1`.
+
+---
+
 # v0.7.0
 
 Experimental Switch Vulkan release based on PPSSPP v1.20.4.

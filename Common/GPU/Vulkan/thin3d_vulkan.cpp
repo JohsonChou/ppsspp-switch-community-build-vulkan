@@ -19,6 +19,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <unordered_map>
 
 #include "Common/Log.h"
 #include "Common/StringUtils.h"
@@ -193,10 +194,9 @@ public:
 		if (module_) {
 			VkShaderModule shaderModule = module_->BlockUntilReady();
 			vulkan_->Delete().QueueDeleteShaderModule(shaderModule);
-			vulkan_->Delete().QueueCallback([](VulkanContext *context, void *m) {
-				auto module = (Promise<VkShaderModule> *)m;
+			vulkan_->Delete().QueueCallback([module = module_](VulkanContext *context) {
 				delete module;
-			}, module_);
+			});
 		}
 	}
 	Promise<VkShaderModule> *Get() const { return module_; }
@@ -598,6 +598,7 @@ private:
 	AutoRef<VKSamplerState> boundSamplers_[MAX_BOUND_TEXTURES];
 	VkImageView boundImageView_[MAX_BOUND_TEXTURES]{};
 	TextureBindFlags boundTextureFlags_[MAX_BOUND_TEXTURES]{};
+	mutable std::unordered_map<DataFormat, uint32_t> dataFormatSupportCache_;
 
 	VulkanPushPool *push_ = nullptr;
 
@@ -1729,6 +1730,11 @@ std::vector<std::string> VKContext::GetExtensionList(bool device, bool enabledOn
 }
 
 uint32_t VKContext::GetDataFormatSupport(DataFormat fmt) const {
+	auto iter = dataFormatSupportCache_.find(fmt);
+	if (iter != dataFormatSupportCache_.end()) {
+		return iter->second;
+	}
+
 	VkFormat vulkan_format = DataFormatToVulkan(fmt);
 	VkFormatProperties properties;
 	vkGetPhysicalDeviceFormatProperties(vulkan_->GetCurrentPhysicalDevice(), vulkan_format, &properties);
@@ -1751,6 +1757,7 @@ uint32_t VKContext::GetDataFormatSupport(DataFormat fmt) const {
 	if (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) {
 		flags |= FMT_STORAGE_IMAGE;
 	}
+	dataFormatSupportCache_[fmt] = flags;
 	return flags;
 }
 
@@ -1769,10 +1776,9 @@ public:
 	}
 	~VKFramebuffer() {
 		_assert_msg_(buf_, "Null buf_ in VKFramebuffer - double delete?");
-		buf_->Vulkan()->Delete().QueueCallback([](VulkanContext *vulkan, void *fb) {
-			VKRFramebuffer *vfb = static_cast<VKRFramebuffer *>(fb);
-			delete vfb;
-		}, buf_);
+		buf_->Vulkan()->Delete().QueueCallback([buf = buf_](VulkanContext *vulkan) {
+			delete buf;
+		});
 		buf_ = nullptr;
 	}
 	VKRFramebuffer *GetFB() const { return buf_; }

@@ -9,13 +9,13 @@ Nintendo Switch compatibility, and a reproducible build process.
 
 Current experimental release:
 
-    v0.7.0
+    v0.7.1
 
 Application metadata:
 
 - Title: PPSSPP Switch Community Build
 - Author: SirSamael
-- Version: 0.7.0
+- Version: 0.7.1
 - Installation path: `/switch/ppsspp/`
 
 ## Main Improvements
@@ -178,8 +178,8 @@ Recommended automated build command:
 
 The automated script generates:
 
-    dist/v0.7.0/PPSSPP-Switch-Community-Build-v0.7.0.zip
-    dist/v0.7.0/PPSSPP-Switch-Community-Build-v0.7.0.zip.sha256
+    dist/v0.7.1/PPSSPP-Switch-Community-Build-v0.7.1.zip
+    dist/v0.7.1/PPSSPP-Switch-Community-Build-v0.7.1.zip.sha256
 
 The release archive contains:
 

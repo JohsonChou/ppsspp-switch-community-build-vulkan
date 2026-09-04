@@ -538,16 +538,6 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       "disabled"
    },
    {
-      "ppsspp_lazy_texture_caching",
-      "Lazy Texture Caching (Speedup)",
-      NULL,
-      "Faster, but can cause text problems in a few games.",
-      NULL,
-      "hacks",
-      BOOL_OPTIONS,
-      "disabled"
-   },
-   {
       "ppsspp_spline_quality",
       "Spline/Bezier Curves Quality",
       NULL,

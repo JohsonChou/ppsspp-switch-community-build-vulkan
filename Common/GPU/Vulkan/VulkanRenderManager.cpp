@@ -177,6 +177,7 @@ bool VKRGraphicsPipeline::Create(VulkanContext *vulkan, VkRenderPass compatibleR
 }
 
 void VKRGraphicsPipeline::DestroyVariants(VulkanContext *vulkan, bool msaaOnly) {
+	std::lock_guard<std::mutex> lock(mutex_);
 	for (size_t i = 0; i < (size_t)RenderPassType::TYPE_COUNT; i++) {
 		if (!this->pipeline[i])
 			continue;
@@ -188,6 +189,7 @@ void VKRGraphicsPipeline::DestroyVariants(VulkanContext *vulkan, bool msaaOnly) 
 		if (pipeline) {
 			vulkan->Delete().QueueDeletePipeline(pipeline);
 		}
+		delete this->pipeline[i];
 		this->pipeline[i] = nullptr;
 	}
 	sampleCount_ = VK_SAMPLE_COUNT_FLAG_BITS_MAX_ENUM;
@@ -223,11 +225,10 @@ void VKRGraphicsPipeline::BlockUntilCompiled() {
 
 void VKRGraphicsPipeline::QueueForDeletion(VulkanContext *vulkan) {
 	// Can't destroy variants here, the pipeline still lives for a while.
-	vulkan->Delete().QueueCallback([](VulkanContext *vulkan, void *p) {
-		VKRGraphicsPipeline *pipeline = (VKRGraphicsPipeline *)p;
-		pipeline->DestroyVariantsInstant(vulkan->GetDevice());
-		delete pipeline;
-	}, this);
+	vulkan->Delete().QueueCallback([this](VulkanContext *vulkan) {
+		DestroyVariantsInstant(vulkan->GetDevice());
+		delete this;
+	});
 }
 
 u32 VKRGraphicsPipeline::GetVariantsBitmask() const {
@@ -493,6 +494,7 @@ void VulkanRenderManager::StopThreads() {
 void VulkanRenderManager::DestroyBackbuffers() {
 	StopThreads();
 	vulkan_->WaitUntilQueueIdle();
+	vulkan_->PerformPendingDeletes();
 
 	for (auto &image : frameDataShared_.swapchainImages_) {
 		vulkan_->Delete().QueueDeleteImageView(image.view);
@@ -696,7 +698,7 @@ void VulkanRenderManager::PollPresentTiming() {
 }
 
 void VulkanRenderManager::BeginFrame(bool enableProfiling, bool enableLogProfiler) {
-	double frameBeginTime = time_now_d()
+	double frameBeginTime = time_now_d();
 	VLOG("BeginFrame");
 	VkDevice device = vulkan_->GetDevice();
 
@@ -1633,11 +1635,6 @@ void VulkanRenderManager::Run(VKRRenderThreadTask &task) {
 	}
 	frameData.Submit(vulkan_, FrameSubmitType::Pending, frameDataShared_);
 
-	// Flush descriptors.
-	double descStart = time_now_d();
-	FlushDescriptors(task.frame);
-	frameData.profile.descWriteTime = time_now_d() - descStart;
-
 	if (!frameData.hasMainCommands) {
 		// Effectively resets both main and present command buffers, since they both live in this pool.
 		// We always record main commands first, so we don't need to reset the present command buffer separately.
@@ -1649,6 +1646,10 @@ void VulkanRenderManager::Run(VKRRenderThreadTask &task) {
 		frameData.hasMainCommands = true;
 		_assert_msg_(res == VK_SUCCESS, "vkBeginCommandBuffer failed! result=%s", VulkanResultToString(res));
 	}
+
+	double descStart = time_now_d();
+	FlushDescriptors(task.frame);
+	frameData.profile.descWriteTime = time_now_d() - descStart;
 
 	queueRunner_.PreprocessSteps(task.steps);
 	// Likely during shutdown, happens in headless.
@@ -1811,19 +1812,22 @@ VKRPipelineLayout *VulkanRenderManager::CreatePipelineLayout(BindingType *bindin
 		layout->frameData[i].pool.Create(vulkan_, bindingTypes, (uint32_t)bindingTypesCount, 1024);
 	}
 
-	pipelineLayouts_.push_back(layout);
+	{
+		std::lock_guard<std::mutex> lock(pipelineLayoutsMutex_);
+		pipelineLayouts_.push_back(layout);
+	}
 	return layout;
 }
 
 void VulkanRenderManager::DestroyPipelineLayout(VKRPipelineLayout *layout) {
-	for (auto iter = pipelineLayouts_.begin(); iter != pipelineLayouts_.end(); iter++) {
-		if (*iter == layout) {
-			pipelineLayouts_.erase(iter);
-			break;
+	vulkan_->Delete().QueueCallback([this, layout](VulkanContext *vulkan) {
+		std::lock_guard<std::mutex> lock(pipelineLayoutsMutex_);
+		for (auto iter = pipelineLayouts_.begin(); iter != pipelineLayouts_.end(); ++iter) {
+			if (*iter == layout) {
+				pipelineLayouts_.erase(iter);
+				break;
+			}
 		}
-	}
-	vulkan_->Delete().QueueCallback([](VulkanContext *vulkan, void *userdata) {
-		VKRPipelineLayout *layout = (VKRPipelineLayout *)userdata;
 		for (int i = 0; i < VulkanContext::MAX_INFLIGHT_FRAMES; i++) {
 			layout->frameData[i].pool.DestroyImmediately();
 		}
@@ -1831,16 +1835,18 @@ void VulkanRenderManager::DestroyPipelineLayout(VKRPipelineLayout *layout) {
 		vkDestroyDescriptorSetLayout(vulkan->GetDevice(), layout->descriptorSetLayout, nullptr);
 
 		delete layout;
-	}, layout);
+	});
 }
 
 void VulkanRenderManager::FlushDescriptors(int frame) {
+	std::lock_guard<std::mutex> lock(pipelineLayoutsMutex_);
 	for (auto iter : pipelineLayouts_) {
 		iter->FlushDescSets(vulkan_, frame, &frameData_[frame].profile);
 	}
 }
 
 void VulkanRenderManager::ResetDescriptorLists(int frame) {
+	std::lock_guard<std::mutex> lock(pipelineLayoutsMutex_);
 	for (auto iter : pipelineLayouts_) {
 		VKRPipelineLayout::FrameData &data = iter->frameData[frame];
 

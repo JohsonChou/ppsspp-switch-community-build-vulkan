@@ -121,7 +121,6 @@ TextureCacheCommon::~TextureCacheCommon() {
 void TextureCacheCommon::StartFrame() {
 	ForgetLastTexture();
 	textureShaderCache_->Decimate();
-	timesInvalidatedAllThisFrame_ = 0;
 	replacementTimeThisFrame_ = 0.0;
 
 	float fps;
@@ -461,8 +460,6 @@ TexCacheEntry *TextureCacheCommon::SetTexture() {
 	int bufw = GetTextureBufw(0, texaddr, texFormat);
 	u8 maxLevel = gstate.getTextureMaxLevel();
 
-	u32 minihash = MiniHash((const u32 *)Memory::GetPointerUnchecked(texaddr));
-
 	TexCache::iterator entryIter = cache_.find(cachekey);
 	TexCacheEntry *entry = nullptr;
 
@@ -492,56 +489,26 @@ TexCacheEntry *TextureCacheCommon::SetTexture() {
 			match = false;
 		}
 
-		bool rehash = entry->GetHashStatus() == TexCacheEntry::STATUS_UNRELIABLE;
+		bool rehash = entry->GetHashStatus() != TexCacheEntry::STATUS_RELIABLE;
 
-		// First let's see if another texture with the same address had a hashfail.
-		if (entry->status & TexCacheEntry::STATUS_CLUT_RECHECK) {
-			// Always rehash in this case, if one changed the rest all probably did.
-			rehash = true;
-			entry->status &= ~TexCacheEntry::STATUS_CLUT_RECHECK;
-		} else if (!gstate_c.IsDirty(DIRTY_TEXTURE_IMAGE)) {
-			// Okay, just some parameter change - the data didn't change, no need to rehash.
+		if (entry->lastSyncDomain == gstate_c.textureSyncTimeDomain) {
+			// The PSP CPU cannot have changed this texture since the last use.
 			rehash = false;
+		} else {
+			entry->lastSyncDomain = gstate_c.textureSyncTimeDomain;
+		}
+
+		if (entry->status & (TexCacheEntry::STATUS_CLUT_RECHECK | TexCacheEntry::STATUS_HASH_RECHECK)) {
+			// A CLUT twin or a GPU block transfer changed the data.  This overrides
+			// the domain shortcut, including for the reliable built-in font texture.
+			rehash = true;
+			entry->status &= ~(TexCacheEntry::STATUS_CLUT_RECHECK | TexCacheEntry::STATUS_HASH_RECHECK);
 		}
 
 		// Do we need to recreate?
 		if (entry->status & TexCacheEntry::STATUS_FORCE_REBUILD) {
 			match = false;
 			entry->status &= ~TexCacheEntry::STATUS_FORCE_REBUILD;
-		}
-
-		if (match) {
-			if (entry->lastFrame != gpuStats.numFlips) {
-				u32 diff = gpuStats.numFlips - entry->lastFrame;
-				entry->numFrames++;
-
-				if (entry->framesUntilNextFullHash < diff) {
-					// Exponential backoff up to 512 frames.  Textures are often reused.
-					if (entry->numFrames > 32) {
-						// Also, try to add some "randomness" to avoid rehashing several textures the same frame.
-						// textureName is unioned with texturePtr and vkTex so will work for the other backends.
-						entry->framesUntilNextFullHash = std::min(512, entry->numFrames) + (((intptr_t)(entry->textureName) >> 12) & 15);
-					} else {
-						entry->framesUntilNextFullHash = entry->numFrames;
-					}
-					rehash = true;
-				} else {
-					entry->framesUntilNextFullHash -= diff;
-				}
-			}
-
-			// If it's not huge or has been invalidated many times, recheck the whole texture.
-			if (entry->invalidHint > 180 || (entry->invalidHint > 15 && (dim >> 8) < 9 && (dim & 0xF) < 9)) {
-				entry->invalidHint = 0;
-				rehash = true;
-			}
-
-			if (minihash != entry->minihash) {
-				match = false;
-				reason = "minihash";
-			} else if (entry->GetHashStatus() == TexCacheEntry::STATUS_RELIABLE) {
-				rehash = false;
-			}
 		}
 
 		if (match && (entry->status & TexCacheEntry::STATUS_TO_SCALE) && (standardScaleFactor_ > 1 || shaderScaleFactor_ > 1) && texelsScaledThisFrame_ < TEXCACHE_MAX_TEXELS_SCALED) {
@@ -649,8 +616,6 @@ TexCacheEntry *TextureCacheCommon::SetTexture() {
 		if (PPGeIsFontTextureAddress(texaddr)) {
 			// It's the builtin font texture.
 			entry->status = TexCacheEntry::STATUS_RELIABLE;
-		} else if (g_Config.bTextureBackoffCache && !IsVideo(texaddr)) {
-			entry->status = TexCacheEntry::STATUS_HASHING;
 		} else {
 			entry->status = TexCacheEntry::STATUS_UNRELIABLE;
 		}
@@ -683,7 +648,6 @@ TexCacheEntry *TextureCacheCommon::SetTexture() {
 
 	// We have to decode it, let's setup the cache entry first.
 	entry->addr = texaddr;
-	entry->minihash = minihash;
 	entry->dim = dim;
 	entry->format = texFormat;
 	entry->maxLevel = maxLevel;
@@ -2594,15 +2558,7 @@ void TextureCacheCommon::DeleteTexture(TexCache::iterator it) {
 bool TextureCacheCommon::CheckFullHash(TexCacheEntry *entry, bool &doDelete) {
 	int w = gstate.getTextureWidth(0);
 	int h = gstate.getTextureHeight(0);
-	bool isVideo = IsVideo(entry->addr);
 	bool swizzled = gstate.isTextureSwizzled();
-
-	// Don't even check the texture, just assume it has changed.
-	if (isVideo && g_Config.bTextureBackoffCache) {
-		// Attempt to ensure the hash doesn't incorrectly match in if the video stops.
-		entry->fullhash = (entry->fullhash + 0xA535A535) * 11 + (entry->fullhash & 4);
-		return false;
-	}
 
 	u32 fullhash;
 	{
@@ -2611,16 +2567,6 @@ bool TextureCacheCommon::CheckFullHash(TexCacheEntry *entry, bool &doDelete) {
 	}
 
 	if (fullhash == entry->fullhash) {
-		if (g_Config.bTextureBackoffCache && !isVideo) {
-			if (entry->GetHashStatus() != TexCacheEntry::STATUS_HASHING && entry->numFrames > TexCacheEntry::FRAMES_REGAIN_TRUST) {
-				// Reset to STATUS_HASHING.
-				entry->SetHashStatus(TexCacheEntry::STATUS_HASHING);
-				entry->status &= ~TexCacheEntry::STATUS_CHANGE_FREQUENT;
-			}
-		} else if (entry->numFrames > TEXCACHE_FRAME_CHANGE_FREQUENT_REGAIN_TRUST) {
-			entry->status &= ~TexCacheEntry::STATUS_CHANGE_FREQUENT;
-		}
-
 		return true;
 	}
 
@@ -2698,11 +2644,6 @@ void TextureCacheCommon::Invalidate(u32 addr, int size, GPUInvalidationType type
 		}
 	}
 
-	// If we're hashing every use, without backoff, then this isn't needed.
-	if (!g_Config.bTextureBackoffCache && type != GPU_INVALIDATE_FORCE) {
-		return;
-	}
-
 	const u64 startKey = (u64)(addr - LARGEST_TEXTURE_SIZE) << 32;
 	u64 endKey = (u64)(addr + size + LARGEST_TEXTURE_SIZE) << 32;
 	if (endKey < startKey) {
@@ -2717,50 +2658,13 @@ void TextureCacheCommon::Invalidate(u32 addr, int size, GPUInvalidationType type
 
 		// Quick check for overlap. Yes the check is right.
 		if (addr < texEnd && addr_end > texAddr) {
-			if (entry->GetHashStatus() == TexCacheEntry::STATUS_RELIABLE) {
-				entry->SetHashStatus(TexCacheEntry::STATUS_HASHING);
-			}
-			if (type == GPU_INVALIDATE_FORCE) {
-				// Just random values to force the hash not to match.
-				entry->fullhash = (entry->fullhash ^ 0x12345678) + 13;
-				entry->minihash = (entry->minihash ^ 0x89ABCDEF) + 89;
-			}
-			if (type != GPU_INVALIDATE_ALL) {
-				gpuStats.numTextureInvalidations++;
-				// Start it over from 0 (unless it's safe.)
-				entry->numFrames = type == GPU_INVALIDATE_SAFE ? 256 : 0;
-				if (type == GPU_INVALIDATE_SAFE) {
-					u32 diff = gpuStats.numFlips - entry->lastFrame;
-					// We still need to mark if the texture is frequently changing, even if it's safely changing.
-					if (diff < TEXCACHE_FRAME_CHANGE_FREQUENT) {
-						entry->status |= TexCacheEntry::STATUS_CHANGE_FREQUENT;
-					}
-				}
-				entry->framesUntilNextFullHash = 0;
-			} else {
-				entry->invalidHint++;
-			}
+			entry->status |= TexCacheEntry::STATUS_HASH_RECHECK;
 		}
 	}
 }
 
 void TextureCacheCommon::InvalidateAll(GPUInvalidationType /*unused*/) {
-	// If we're hashing every use, without backoff, then this isn't needed.
-	if (!g_Config.bTextureBackoffCache) {
-		return;
-	}
-
-	if (timesInvalidatedAllThisFrame_ > 5) {
-		return;
-	}
-	timesInvalidatedAllThisFrame_++;
-
-	for (TexCache::iterator iter = cache_.begin(), end = cache_.end(); iter != end; ++iter) {
-		if (iter->second->GetHashStatus() == TexCacheEntry::STATUS_RELIABLE) {
-			iter->second->SetHashStatus(TexCacheEntry::STATUS_HASHING);
-		}
-		iter->second->invalidHint++;
-	}
+	// Targeted invalidation in Invalidate() is sufficient with sync domains.
 }
 
 void TextureCacheCommon::ClearNextFrame() {
@@ -3125,6 +3029,9 @@ std::string TexStatusToString(TexCacheEntry::TexStatus status) {
 	}
 	if (status & TexCacheEntry::STATUS_CLUT_RECHECK) {
 		result += "CLUT_RECHECK ";
+	}
+	if (status & TexCacheEntry::STATUS_HASH_RECHECK) {
+		result += "HASH_RECHECK ";
 	}
 	if (status & TexCacheEntry::STATUS_CHANGE_FREQUENT) {
 		result += "FREQ ";
