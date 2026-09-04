@@ -1,7 +1,7 @@
 # Nintendo Switch Submodule Patches
 
 These patches contain the submodule changes required by PPSSPP Switch Community
-Build v0.7.1.
+Build v0.7.1 and later.
 
 ## Required Patches
 

@@ -2,20 +2,20 @@
 
 An unofficial Nintendo Switch community port of PPSSPP, based on PPSSPP v1.20.4.
 
-This release focuses on stable game audio, correct video and cutscene playback,
-Nintendo Switch compatibility, and a reproducible build process.
+The `mainline` branch is the unstable development line for Switch performance
+work. Stable builds remain available from the GitHub Releases page.
 
-## Latest Release
+## Current Development Build
 
-Current experimental release:
+Current mainline version:
 
-    v0.7.1
+    v0.7.2-dev
 
 Application metadata:
 
 - Title: PPSSPP Switch Community Build
 - Author: SirSamael
-- Version: 0.7.1
+- Version: 0.7.2-dev
 - Installation path: `/switch/ppsspp/`
 
 ## Main Improvements
@@ -186,8 +186,8 @@ Recommended automated build command:
 
 The automated script generates:
 
-    dist/v0.7.1/PPSSPP-Switch-Community-Build-v0.7.1.zip
-    dist/v0.7.1/PPSSPP-Switch-Community-Build-v0.7.1.zip.sha256
+    dist/v0.7.2-dev/PPSSPP-Switch-Community-Build-v0.7.2-dev.zip
+    dist/v0.7.2-dev/PPSSPP-Switch-Community-Build-v0.7.2-dev.zip.sha256
 
 The release archive contains:
 
