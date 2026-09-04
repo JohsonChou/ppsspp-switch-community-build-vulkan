@@ -70,7 +70,7 @@ echo
 
 cd "$ROOT"
 
-if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+if ! git diff --ignore-submodules=dirty --quiet || ! git diff --cached --ignore-submodules=dirty --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
   echo "ERROR: Release builds must start from committed top-level source."
   return 1 2>/dev/null || false
 fi
