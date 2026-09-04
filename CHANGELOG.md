@@ -19,8 +19,10 @@ Maintenance release based on PPSSPP v1.20.4 and the v0.7.0 Switch Vulkan port.
 ## Vulkan and Runtime Correctness
 
 - Backported targeted Vulkan deferred-deletion and pipeline-layout threading
-  fixes, the depth-transfer barrier correction, and cached format capability
-  queries.
+  fixes, render-pass cache locking, descriptor-index validation, the
+  depth-transfer barrier correction, and cached format capability queries.
+- Added framebuffer upload range checks, corrected extended-RAM address
+  validation, and hardened texture replacement hashing at memory boundaries.
 - Backported ARM64 address sign-extension and savestate state-handling fixes.
 - Bumped the Switch release metadata and artifact version to `0.7.1`.
 

@@ -300,7 +300,7 @@ inline bool IsValidAddress(const u32 address) {
 		return address < 0x80000000;  // Let's disallow kernel-flagged VRAM. We don't have it mapped and I am not sure if it's accessible.
 	} else if ((address & 0xBFFFC000) == 0x00010000) {
 		return true;
-	} else if ((address & 0x3F000000) >= 0x08000000 && (address & 0x3F000000) < 0x08000000 + g_MemorySize) {
+	} else if ((address & 0x3FFFFFFF) >= 0x08000000 && (address & 0x3FFFFFFF) < 0x08000000 + g_MemorySize) {
 		return true;
 	} else {
 		return false;
@@ -314,7 +314,7 @@ inline bool IsValid4AlignedAddress(const u32 address) {
 		return address < 0x80000000;  // Let's disallow kernel-flagged VRAM. We don't have it mapped and I am not sure if it's accessible.
 	} else if ((address & 0xBFFFC003) == 0x00010000) {
 		return true;
-	} else if ((address & 0x3F000000) >= 0x08000000 && (address & 0x3F000000) < 0x08000000 + g_MemorySize) {
+	} else if ((address & 0x3FFFFFFF) >= 0x08000000 && (address & 0x3FFFFFFF) < 0x08000000 + g_MemorySize) {
 		return (address & 3) == 0;
 	} else {
 		return false;
@@ -332,7 +332,7 @@ inline u32 MaxSizeAtAddress(const u32 address){
 		}
 	} else if ((address & 0xBFFFC000) == 0x00010000) {
 		return 0x00014000 - (address & 0x3FFFFFFF);
-	} else if ((address & 0x3F000000) >= 0x08000000 && (address & 0x3F000000) < 0x08000000 + g_MemorySize) {
+	} else if ((address & 0x3FFFFFFF) >= 0x08000000 && (address & 0x3FFFFFFF) < 0x08000000 + g_MemorySize) {
 		return 0x08000000 + g_MemorySize - (address & 0x3FFFFFFF);
 	} else {
 		return 0;

@@ -450,22 +450,22 @@ void __KernelModuleDoState(PointerWrap &p)
 
 	if (s >= 2) {
 		Do(p, loadedModules);
+	}
 
-		if (p.mode == p.MODE_READ) {
-			u32 error;
-			// We process these late, since they depend on loadedModules for interlinking.
-			for (SceUID moduleId : loadedModules) {
-				PSPModule *module = kernelObjects.Get<PSPModule>(moduleId, error);
-				if (module && module->libstub != 0) {
-					if (!KernelImportModuleFuncs(module, nullptr, true)) {
-						ERROR_LOG(Log::Loader, "Something went wrong loading imports on load state");
-					}
+	if (p.mode == p.MODE_READ) {
+		u32 error;
+		// We process these late, since they depend on loadedModules for interlinking.
+		for (SceUID moduleId : loadedModules) {
+			PSPModule *module = kernelObjects.Get<PSPModule>(moduleId, error);
+			if (module && module->libstub != 0) {
+				if (!KernelImportModuleFuncs(module, nullptr, true)) {
+					ERROR_LOG(Log::Loader, "Something went wrong loading imports on load state");
 				}
 			}
+		}
 
-			if (g_Config.bFuncReplacements) {
-				MIPSAnalyst::ReplaceFunctions();
-			}
+		if (g_Config.bFuncReplacements) {
+			MIPSAnalyst::ReplaceFunctions();
 		}
 	}
 }

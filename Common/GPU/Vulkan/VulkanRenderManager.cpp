@@ -494,7 +494,6 @@ void VulkanRenderManager::StopThreads() {
 void VulkanRenderManager::DestroyBackbuffers() {
 	StopThreads();
 	vulkan_->WaitUntilQueueIdle();
-	vulkan_->PerformPendingDeletes();
 
 	for (auto &image : frameDataShared_.swapchainImages_) {
 		vulkan_->Delete().QueueDeleteImageView(image.view);
@@ -530,6 +529,7 @@ VulkanRenderManager::~VulkanRenderManager() {
 	_dbg_assert_(!runCompileThread_);  // StopThread should already have been called from DestroyBackbuffers.
 
 	vulkan_->WaitUntilQueueIdle();
+	vulkan_->PerformPendingDeletes();  // Some callbacks contain a reference to the render manager.
 
 	_dbg_assert_(pipelineLayouts_.empty());
 

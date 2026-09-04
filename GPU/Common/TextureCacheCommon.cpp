@@ -511,6 +511,12 @@ TexCacheEntry *TextureCacheCommon::SetTexture() {
 			entry->status &= ~TexCacheEntry::STATUS_FORCE_REBUILD;
 		}
 
+		// Keep the old frequent-change tracking without using it to schedule hashes.
+		// Hash scheduling is now handled entirely by synchronization domains.
+		if (match && entry->lastFrame != gpuStats.numFlips) {
+			entry->numFrames++;
+		}
+
 		if (match && (entry->status & TexCacheEntry::STATUS_TO_SCALE) && (standardScaleFactor_ > 1 || shaderScaleFactor_ > 1) && texelsScaledThisFrame_ < TEXCACHE_MAX_TEXELS_SCALED) {
 			if ((entry->status & TexCacheEntry::STATUS_CHANGE_FREQUENT) == 0) {
 				// INFO_LOG(Log::G3D, "Reloading texture to do the scaling we skipped..");
@@ -2567,6 +2573,9 @@ bool TextureCacheCommon::CheckFullHash(TexCacheEntry *entry, bool &doDelete) {
 	}
 
 	if (fullhash == entry->fullhash) {
+		if (entry->numFrames > TEXCACHE_FRAME_CHANGE_FREQUENT_REGAIN_TRUST) {
+			entry->status &= ~TexCacheEntry::STATUS_CHANGE_FREQUENT;
+		}
 		return true;
 	}
 

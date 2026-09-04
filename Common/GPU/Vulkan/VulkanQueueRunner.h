@@ -253,6 +253,7 @@ public:
 	VKRRenderPass *GetRenderPass(const RPKey &key);
 
 	bool GetRenderPassKey(VKRRenderPass *passToFind, RPKey *outKey) const {
+		std::lock_guard<std::mutex> lock(renderPassesMutex_);
 		bool found = false;
 		renderPasses_.Iterate([passToFind, &found, outKey](const RPKey &rpkey, const VKRRenderPass *pass) {
 			if (pass == passToFind) {
@@ -302,6 +303,7 @@ private:
 
 	// Renderpasses, all combinations of preserving or clearing or dont-care-ing fb contents.
 	// Each VKRRenderPass contains all compatibility classes (which attachments they have, etc).
+	mutable std::mutex renderPassesMutex_;
 	DenseHashMap<RPKey, VKRRenderPass *> renderPasses_;
 
 	// Readback buffer. Currently we only support synchronous readback, so we only really need one.

@@ -42,6 +42,8 @@ enum FramebufferNotification {
 
 // Changes more frequent than this will be considered "frequent" and prevent texture scaling.
 #define TEXCACHE_FRAME_CHANGE_FREQUENT 6
+// Stop treating a changing texture as frequent after this many stable frames.
+#define TEXCACHE_FRAME_CHANGE_FREQUENT_REGAIN_TRUST 33
 
 #define TEXCACHE_MAX_TEXELS_SCALED (256*256)  // Per frame
 
@@ -192,7 +194,6 @@ struct TexCacheEntry {
 	int lastSyncDomain;
 	int numFrames;
 	int numInvalidated;
-	u32 framesUntilNextFullHash;
 	u32 fullhash;
 	u32 cluthash;
 	u16 maxSeenV;
@@ -484,7 +485,7 @@ protected:
 
 		gpuStats.numTextureDataBytesHashed += sizeInRAM;
 
-		if (Memory::IsValidAddress(addr + sizeInRAM)) {
+		if (Memory::IsValidRange(addr, sizeInRAM)) {
 			return StableQuickTexHash(checkp, sizeInRAM);
 		} else {
 			return 0;

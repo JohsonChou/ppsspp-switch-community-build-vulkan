@@ -17,6 +17,7 @@
 
 #include "ppsspp_config.h"
 
+#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <png.h>
@@ -524,6 +525,7 @@ u32 TextureReplacer::ComputeHash(u32 addr, int bufw, int w, int h, bool swizzled
 		reduceHashSize = LookupReduceHashRange(w, h);
 		// default to reduceHashGlobalValue which default is 0.5
 	}
+	reduceHashSize = std::clamp(reduceHashSize, 0.0f, 1.0f);
 
 	if (bufw <= w) {
 		// We can assume the data is contiguous.  These are the total used pixels.
@@ -559,6 +561,11 @@ u32 TextureReplacer::ComputeHash(u32 addr, int bufw, int w, int h, bool swizzled
 		// We have gaps.  Let's hash each row and sum.
 		const u32 bytesPerLine = (textureBitsPerPixel[fmt] * w) / 8 * reduceHashSize;
 		const u32 stride = (textureBitsPerPixel[fmt] * bufw) / 8;
+		const u32 sizeInRAM = h > 0 ? (h - 1) * stride + bytesPerLine : 0;
+		if (Memory::MaxSizeAtAddress(addr) < sizeInRAM) {
+			ERROR_LOG(Log::G3D, "Can't hash a %d bytes texture at %08x - end point is outside memory", sizeInRAM, addr);
+			return 0;
+		}
 
 		u32 result = 0;
 		switch (hash_) {

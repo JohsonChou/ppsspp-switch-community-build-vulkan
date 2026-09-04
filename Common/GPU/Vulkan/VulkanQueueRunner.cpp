@@ -195,6 +195,8 @@ void VulkanQueueRunner::DestroyBackBuffers() {
 // Self-dependency: https://github.com/gpuweb/gpuweb/issues/442#issuecomment-547604827
 // Also see https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#synchronization-pipeline-barriers-subpass-self-dependencies
 VKRRenderPass *VulkanQueueRunner::GetRenderPass(const RPKey &key) {
+	std::lock_guard<std::mutex> lock(renderPassesMutex_);
+
 	VKRRenderPass *foundPass;
 	if (renderPasses_.Get(key, &foundPass)) {
 		return foundPass;
@@ -1179,6 +1181,7 @@ void VulkanQueueRunner::PerformRenderPass(const VKRStep &step, VkCommandBuffer c
 
 		case VKRRenderCommand::DRAW_INDEXED:
 			if (pipelineOK) {
+				_dbg_assert_(c.drawIndexed.descSetIndex < descSets->size());
 				VkDescriptorSet set = (*descSets)[c.drawIndexed.descSetIndex].set;
 				_dbg_assert_(set != VK_NULL_HANDLE);
 				vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &set, c.drawIndexed.numUboOffsets, c.drawIndexed.uboOffsets);
@@ -1191,7 +1194,8 @@ void VulkanQueueRunner::PerformRenderPass(const VKRStep &step, VkCommandBuffer c
 
 		case VKRRenderCommand::DRAW:
 			if (pipelineOK) {
-				VkDescriptorSet set = (*descSets)[c.drawIndexed.descSetIndex].set;
+				_dbg_assert_(c.draw.descSetIndex < descSets->size());
+				VkDescriptorSet set = (*descSets)[c.draw.descSetIndex].set;
 				_dbg_assert_(set != VK_NULL_HANDLE);
 				vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &set, c.draw.numUboOffsets, c.draw.uboOffsets);
 				if (c.draw.vbuffer) {
