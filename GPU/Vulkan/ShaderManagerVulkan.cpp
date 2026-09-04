@@ -89,19 +89,17 @@ static Promise<VkShaderModule> *CompileShaderModuleAsync(VulkanContext *vulkan, 
 		return shaderModule;
 	};
 
-#if defined(_DEBUG) || (PPSSPP_PLATFORM(SWITCH) && defined(SWITCH_USE_NXVK))
-	// Debug allocator locking makes glslang parallelism pathological. Switch
-	// newlib also lacks pthread_detach, so compile inline there.
-	bool singleThreaded = true;
+#if defined(_DEBUG)
+	// Debug allocator locking makes glslang parallelism pathological.
+	return Promise<VkShaderModule>::AlreadyDone(compile());
+#elif PPSSPP_PLATFORM(SWITCH) && defined(SWITCH_USE_NXVK)
+	// Switch newlib does not provide pthread_detach(), so the normal dedicated
+	// task path cannot be used. Keep shader work off the emulation thread and
+	// separate from CPU_COMPUTE pipeline tasks, which wait for these promises.
+	return Promise<VkShaderModule>::Spawn(&g_threadManager, compile, TaskType::IO_BLOCKING, TaskPriority::HIGH);
 #else
-	bool singleThreaded = false;
+	return Promise<VkShaderModule>::Spawn(&g_threadManager, compile, TaskType::DEDICATED_THREAD);
 #endif
-
-	if (singleThreaded) {
-		return Promise<VkShaderModule>::AlreadyDone(compile());
-	} else {
-		return Promise<VkShaderModule>::Spawn(&g_threadManager, compile, TaskType::DEDICATED_THREAD);
-	}
 }
 
 VulkanFragmentShader::VulkanFragmentShader(VulkanContext *vulkan, FShaderID id, FragmentShaderFlags flags, const char *code)

@@ -1,3 +1,16 @@
+# v0.7.2-dev
+
+Unstable development branch based on v0.7.1.
+
+## Performance
+
+- Restored asynchronous Vulkan shader generation on Switch using the existing
+  I/O worker pool. This avoids periodic emulation-thread stalls when games such
+  as Grand Theft Auto encounter new shader combinations, while keeping shader
+  generation separate from pipeline tasks that wait for it.
+
+---
+
 # v0.7.1
 
 Maintenance release based on PPSSPP v1.20.4 and the v0.7.0 Switch Vulkan port.
