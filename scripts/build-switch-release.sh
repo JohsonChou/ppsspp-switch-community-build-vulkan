@@ -39,10 +39,27 @@ apply_submodule_patch() {
   local patch="$2"
   local name="$3"
 
+  if ! git -C "$submodule" diff --cached --quiet ||
+     [ -n "$(git -C "$submodule" ls-files --others --exclude-standard)" ]; then
+    echo "ERROR: $name submodule contains staged or untracked changes."
+    return 1
+  fi
+
   if git -C "$submodule" apply --check "$patch" >/dev/null 2>&1; then
+    if ! git -C "$submodule" diff --quiet; then
+      echo "ERROR: $name submodule contains unrelated changes."
+      return 1
+    fi
     echo "Applying $name patch..."
     git -C "$submodule" apply "$patch"
   elif git -C "$submodule" apply --reverse --check "$patch" >/dev/null 2>&1; then
+    if ! diff -q \
+      <(sed '/^index /d' "$patch") \
+      <(git -C "$submodule" diff --no-ext-diff | sed '/^index /d') \
+      >/dev/null; then
+      echo "ERROR: $name submodule contains changes beyond its release patch."
+      return 1
+    fi
     echo "$name patch is already applied."
   else
     echo "ERROR: $name patch cannot be applied cleanly."

@@ -46,7 +46,7 @@ into this build.
 
 Clone the repository and select the release branch:
 
-    git clone --recursive https://github.com/SirSamael/ppsspp-switch-community-build.git
+    git clone --recursive https://github.com/JohsonChou/ppsspp-switch-community-build-vulkan.git ppsspp-switch-community-build
     cd ppsspp-switch-community-build
     git switch release-v0.7.1
 
@@ -87,7 +87,8 @@ The ZIP archive contains:
     licenses/nxvk/
     BUILD-METADATA.txt
 
-Release builds must start from committed top-level source.
+Release builds must start from committed top-level source. Submodules must be
+clean or contain only the exact documented Switch patches.
 
 ## Manual Build
 
@@ -103,6 +104,7 @@ Run these commands from the repository root:
     git -C ext/aemu_postoffice apply ../../patches/submodules/aemu-postoffice-switch.patch
     git -C ext/glslang apply ../../patches/submodules/glslang-switch.patch
     git -C ext/lua apply ../../patches/submodules/lua-switch.patch
+    git -C ext/nxvk apply ../../patches/submodules/nxvk-switch-zero-copy-sync.patch
 
 Before applying a patch again, check whether it is already applied.
 

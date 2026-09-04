@@ -68,6 +68,14 @@ These changes fixed:
 - Correct `/switch/ppsspp/` application data path
 - Safe handling for unsupported external browser actions
 
+### Texture Cache
+
+- Synchronization-domain texture hashing backported from newer PPSSPP
+- Targeted texture invalidation for GPU block transfers
+- Secondary texture cache enabled for all known Gran Turismo regions
+- Gran Turismo's per-character menu texture updates no longer force redundant
+  hashes within the same GE synchronization domain
+
 ### Reproducible Build System
 
 The repository includes scripts for:
@@ -221,6 +229,7 @@ Required submodule patches:
     patches/submodules/aemu-postoffice-switch.patch
     patches/submodules/glslang-switch.patch
     patches/submodules/lua-switch.patch
+    patches/submodules/nxvk-switch-zero-copy-sync.patch
 
 ## Development and Testing
 
