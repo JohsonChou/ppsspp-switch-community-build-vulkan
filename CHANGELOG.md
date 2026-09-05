@@ -1,6 +1,7 @@
-# v0.7.2-dev
+# v0.7.2
 
-Unstable development branch based on v0.7.1.
+Maintenance release based on PPSSPP v1.20.4 and the v0.7.1 texture-cache
+backports.
 
 ## Performance
 
@@ -11,8 +12,8 @@ Unstable development branch based on v0.7.1.
 
 ## Switch Runtime
 
-- Restored standard NRO exit behavior so Exit returns to the launching Homebrew
-  Menu instead of terminating the title-takeover session.
+- Exit terminates the title-takeover session and returns to the HOME Menu to
+  avoid a launcher crash after SDL2 audio use.
 
 ---
 

@@ -1,4 +1,4 @@
-# PPSSPP Switch Community Build v0.7.1
+# PPSSPP Switch Community Build v0.7.2
 
 Build instructions for the Nintendo Switch community build based on PPSSPP v1.20.4.
 
@@ -48,7 +48,7 @@ Clone the repository and select the release branch:
 
     git clone --recursive https://github.com/JohsonChou/ppsspp-switch-community-build-vulkan.git ppsspp-switch-community-build
     cd ppsspp-switch-community-build
-    git switch release-v0.7.1
+    git switch release-v0.7.2
 
 For an existing clone:
 
@@ -75,8 +75,8 @@ Run from the repository root:
 
 Generated files:
 
-    dist/v0.7.1/PPSSPP-Switch-Community-Build-v0.7.1.zip
-    dist/v0.7.1/PPSSPP-Switch-Community-Build-v0.7.1.zip.sha256
+    dist/v0.7.2/PPSSPP-Switch-Community-Build-v0.7.2.zip
+    dist/v0.7.2/PPSSPP-Switch-Community-Build-v0.7.2.zip.sha256
 
 The ZIP archive contains:
 
@@ -160,7 +160,7 @@ Run from the repository root:
 
     cmake \
       -S . \
-      -B build-switch-v0.7.1 \
+      -B build-switch-v0.7.2 \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Switch.cmake \
@@ -168,7 +168,7 @@ Run from the repository root:
       -DUSE_LIBNX=ON \
       -DSWITCH_USE_NXVK=ON \
       -DNXVK_PREFIX="$PWD/build-switch-nxvk-prefix" \
-      -DPPSSPP_GIT_VERSION_OVERRIDE=v0.7.1 \
+      -DPPSSPP_GIT_VERSION_OVERRIDE=v0.7.2 \
       -DUSING_EGL=ON \
       -DUSING_GLES2=ON \
       -DUSING_FBDEV=ON \
@@ -188,31 +188,31 @@ Run from the repository root:
 
 ### 6. Compile PPSSPP
 
-    cmake --build build-switch-v0.7.1 --parallel 2
+    cmake --build build-switch-v0.7.2 --parallel 2
 
 Expected executable:
 
-    build-switch-v0.7.1/PPSSPPSDL.elf
+    build-switch-v0.7.2/PPSSPPSDL.elf
 
 Expected generated assets:
 
-    build-switch-v0.7.1/assets/
+    build-switch-v0.7.2/assets/
 
 ### 7. Generate Homebrew Metadata
 
     /opt/devkitpro/tools/bin/nacptool --create \
       "PPSSPP Switch Community Build" \
       "SirSamael" \
-      "0.7.1" \
-      build-switch-v0.7.1/PPSSPP.nacp
+      "0.7.2" \
+      build-switch-v0.7.2/PPSSPP.nacp
 
 ### 8. Generate the NRO
 
     /opt/devkitpro/tools/bin/elf2nro \
-      build-switch-v0.7.1/PPSSPPSDL.elf \
-      build-switch-v0.7.1/PPSSPP.nro \
+      build-switch-v0.7.2/PPSSPPSDL.elf \
+      build-switch-v0.7.2/PPSSPP.nro \
       --icon=icons/PPSSPP-icon.jpg \
-      --nacp=build-switch-v0.7.1/PPSSPP.nacp
+      --nacp=build-switch-v0.7.2/PPSSPP.nacp
 
 ## SD Card Installation
 
@@ -231,9 +231,9 @@ Album/applet mode. Hold `R` while launching a retail title from the Homebrew
 Menu, then start PPSSPP in that title-takeover session. NXVK requires the full
 application memory allocation.
 
-Choosing Exit returns to the Homebrew Menu that launched PPSSPP. Update Sphaira
-to version 1.0.3 or newer if its homebrew-list restore path crashes while
-reloading invalid or oversized NRO icons.
+Choosing Exit closes the title-takeover session and returns to the HOME Menu.
+This avoids a known crash when SDL2 audio homebrew returns to Sphaira from a
+title-takeover session, which remains reproducible with Sphaira 1.0.6.
 
 NetLoader and nxlink launching are not recommended for this release.
 

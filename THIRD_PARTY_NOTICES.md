@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-PPSSPP Switch Community Build v0.7.2-dev is distributed under the GNU General
+PPSSPP Switch Community Build v0.7.2 is distributed under the GNU General
 Public License, version 2.0 or later. The complete license text is included as
 `LICENSE.TXT` in the binary package.
 
