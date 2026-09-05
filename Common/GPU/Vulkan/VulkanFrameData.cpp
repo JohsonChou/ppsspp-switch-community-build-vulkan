@@ -2,7 +2,9 @@
 
 #include "VulkanFrameData.h"
 #include "Common/Log.h"
+#include "Common/PerfDiagnostics.h"
 #include "Common/StringUtils.h"
+#include "Common/TimeUtil.h"
 
 #if 0 // def _DEBUG
 #define VLOG(...) NOTICE_LOG(Log::G3D, __VA_ARGS__)
@@ -78,7 +80,13 @@ void FrameData::AcquireNextImage(VulkanContext *vulkan) {
 	_dbg_assert_(!hasAcquired);
 
 	// Get the index of the next available swapchain image, and a semaphore to block command buffer execution on.
+#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double acquireStart = time_now_d();
+#endif
 	VkResult res = vkAcquireNextImageKHR(vulkan->GetDevice(), vulkan->GetSwapchain(), UINT64_MAX, acquireSemaphore, (VkFence)VK_NULL_HANDLE, &curSwapchainImage);
+#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::SWAPCHAIN_ACQUIRE, time_now_d() - acquireStart);
+#endif
 	switch (res) {
 	case VK_SUCCESS:
 		hasAcquired = true;
@@ -138,7 +146,14 @@ VkResult FrameData::QueuePresent(VulkanContext *vulkan, FrameDataShared &shared)
 		}
 	}
 
-	return vkQueuePresentKHR(vulkan->GetGraphicsQueue(), &present);
+#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double presentStart = time_now_d();
+#endif
+	const VkResult result = vkQueuePresentKHR(vulkan->GetGraphicsQueue(), &present);
+#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::SWAPCHAIN_PRESENT, time_now_d() - presentStart);
+#endif
+	return result;
 }
 
 VkCommandBuffer FrameData::GetInitCmd(VulkanContext *vulkan) {

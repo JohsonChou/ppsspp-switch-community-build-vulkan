@@ -87,11 +87,6 @@ SDLJoystick *joystick = NULL;
 
 #if PPSSPP_PLATFORM(SWITCH)
 #define LIBNX_SWKBD_LIMIT 500 // enforced by HOS
-// Returning to Sphaira after using SDL audio can crash the loader. Ask libnx to
-// terminate the title cleanly after main() returns instead of resuming hbloader.
-extern "C" {
-u32 __nx_applet_exit_mode = 1;
-}
 #if defined(SWITCH_USE_NXVK)
 u32 __nx_applet_type = AppletType_Application;
 size_t __nx_heap_size = 0;

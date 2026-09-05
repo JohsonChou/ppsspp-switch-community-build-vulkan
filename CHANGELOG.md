@@ -4,10 +4,15 @@ Unstable development branch based on v0.7.1.
 
 ## Performance
 
-- Restored asynchronous Vulkan shader generation on Switch using the existing
-  I/O worker pool. This avoids periodic emulation-thread stalls when games such
-  as Grand Theft Auto encounter new shader combinations, while keeping shader
-  generation separate from pipeline tasks that wait for it.
+- Added a small Switch-local read-ahead cache for ISO, CSO, and CHD files to
+  reduce storage latency from bursty disc access patterns.
+- Fixed races, short-read handling, and range validation in full-ISO RAM
+  caching, including CHD reads during game startup.
+
+## Switch Runtime
+
+- Restored standard NRO exit behavior so Exit returns to the launching Homebrew
+  Menu instead of terminating the title-takeover session.
 
 ---
 

@@ -43,6 +43,7 @@ using namespace std::placeholders;
 #include "Common/System/OSD.h"
 #include "Common/Profiler/Profiler.h"
 #include "Common/Math/curves.h"
+#include "Common/PerfDiagnostics.h"
 #include "Common/StringUtils.h"
 #include "Common/TimeUtil.h"
 
@@ -1737,6 +1738,9 @@ ScreenRenderFlags EmuScreen::render(ScreenRenderMode mode) {
 ScreenRenderFlags EmuScreen::RunEmulation(bool skipBufferEffects) {
 	using namespace Draw;
 	ScreenRenderFlags flags = ScreenRenderFlags::NONE;
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double emulationFrameStart = time_now_d();
+	#endif
 
 	g_OSD.NudgeIngameNotifications();
 
@@ -1755,7 +1759,13 @@ ScreenRenderFlags EmuScreen::RunEmulation(bool skipBufferEffects) {
 		SaveState::Process();
 
 		if (gpu) {
+			#if defined(SWITCH_PERF_DIAGNOSTICS)
+			const double gpuBeginStart = time_now_d();
+			#endif
 			gpu->BeginHostFrame(displayLayoutConfig);
+			#if defined(SWITCH_PERF_DIAGNOSTICS)
+			PerfDiagnostics::Record(PerfDiagnostics::Metric::GPU_BEGIN_HOST_FRAME, time_now_d() - gpuBeginStart);
+			#endif
 		}
 
 		// Freeze-frame functionality (loads a savestate on every frame).
@@ -1771,7 +1781,13 @@ ScreenRenderFlags EmuScreen::RunEmulation(bool skipBufferEffects) {
 			}
 		}
 
+		#if defined(SWITCH_PERF_DIAGNOSTICS)
+		const double cpuRunStart = time_now_d();
+		#endif
 		PSP_RunLoopWhileState();
+		#if defined(SWITCH_PERF_DIAGNOSTICS)
+		PerfDiagnostics::Record(PerfDiagnostics::Metric::CPU_RUN_LOOP, time_now_d() - cpuRunStart);
+		#endif
 
 		// Hopefully, after running, coreState is now CORE_NEXTFRAME
 		switch (coreState) {
@@ -1812,8 +1828,18 @@ ScreenRenderFlags EmuScreen::RunEmulation(bool skipBufferEffects) {
 
 		if (gpu) {
 			// Run post processing and other passes.
+			#if defined(SWITCH_PERF_DIAGNOSTICS)
+			const double gpuPrepareStart = time_now_d();
+			#endif
 			gpu->PrepareCopyDisplayToOutput(displayLayoutConfig);
+			#if defined(SWITCH_PERF_DIAGNOSTICS)
+			PerfDiagnostics::Record(PerfDiagnostics::Metric::GPU_PREPARE_DISPLAY, time_now_d() - gpuPrepareStart);
+			const double gpuEndStart = time_now_d();
+			#endif
 			gpu->EndHostFrame();
+			#if defined(SWITCH_PERF_DIAGNOSTICS)
+			PerfDiagnostics::Record(PerfDiagnostics::Metric::GPU_END_HOST_FRAME, time_now_d() - gpuEndStart);
+			#endif
 
 			// The right time to run this
 			if (ScreenshotNotifyPostGameRender(draw) && skipBufferEffects) {
@@ -1847,6 +1873,9 @@ ScreenRenderFlags EmuScreen::RunEmulation(bool skipBufferEffects) {
 	}
 
 	runImDebugger();
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::EMULATION_FRAME, time_now_d() - emulationFrameStart);
+	#endif
 
 	return flags;
 }

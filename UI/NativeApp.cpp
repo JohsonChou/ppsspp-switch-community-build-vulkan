@@ -71,6 +71,7 @@
 #include "Common/Math/math_util.h"
 #include "Common/Math/lin/matrix4x4.h"
 #include "Common/Profiler/Profiler.h"
+#include "Common/PerfDiagnostics.h"
 #include "Common/Data/Encoding/Utf8.h"
 #include "Common/File/VFS/VFS.h"
 #include "Common/File/VFS/ZipFileReader.h"
@@ -198,6 +199,77 @@ std::thread *graphicsLoadThread;
 
 // globals
 Path boot_filename;
+
+#if defined(SWITCH_PERF_DIAGNOSTICS)
+struct SlowFrameSample {
+	double frameMs;
+	PerfDiagnostics::FrameSnapshot metrics;
+};
+
+static constexpr size_t MAX_SLOW_FRAME_SAMPLES = 512;
+static std::array<SlowFrameSample, MAX_SLOW_FRAME_SAMPLES> slowFrameSamples;
+static size_t slowFrameSampleCount = 0;
+static size_t droppedSlowFrameSamples = 0;
+static bool perfDiagnosticsWasInGame = false;
+
+static void CaptureSlowFrame(double frameMs) {
+	if (slowFrameSampleCount < slowFrameSamples.size()) {
+		slowFrameSamples[slowFrameSampleCount++] = {frameMs, PerfDiagnostics::SnapshotFrame()};
+	} else {
+		++droppedSlowFrameSamples;
+	}
+}
+
+static void FlushSlowFrameSamples() {
+	INFO_LOG(Log::System, "PERF_SESSION slowFrames=%zu dropped=%zu", slowFrameSampleCount, droppedSlowFrameSamples);
+	for (size_t i = 0; i < slowFrameSampleCount; ++i) {
+		const SlowFrameSample &sample = slowFrameSamples[i];
+		const auto &perf = sample.metrics;
+		auto ms = [&perf](PerfDiagnostics::Metric metric) {
+			return PerfDiagnostics::Get(perf, metric).totalUs / 1000.0;
+		};
+		const auto &hostRead = PerfDiagnostics::Get(perf, PerfDiagnostics::Metric::HOST_READ);
+		const auto &readAheadHit = PerfDiagnostics::Get(perf, PerfDiagnostics::Metric::READ_AHEAD_HIT);
+		const auto &isoRead = PerfDiagnostics::Get(perf, PerfDiagnostics::Metric::ISO_READ);
+		const auto &chdRead = PerfDiagnostics::Get(perf, PerfDiagnostics::Metric::CHD_HUNK_READ);
+		const auto &renderSubmitWait = PerfDiagnostics::Get(perf, PerfDiagnostics::Metric::RENDER_SUBMIT_WAIT);
+		const auto &fenceWait = PerfDiagnostics::Get(perf, PerfDiagnostics::Metric::FRAME_FENCE_WAIT);
+		const auto &swapchainAcquire = PerfDiagnostics::Get(perf, PerfDiagnostics::Metric::SWAPCHAIN_ACQUIRE);
+		const auto &swapchainPresent = PerfDiagnostics::Get(perf, PerfDiagnostics::Metric::SWAPCHAIN_PRESENT);
+		const double accountedMs = ms(PerfDiagnostics::Metric::DRAW_BEGIN) +
+			ms(PerfDiagnostics::Metric::SCREEN_RENDER) + ms(PerfDiagnostics::Metric::DRAW_END) +
+			ms(PerfDiagnostics::Metric::POST_SUBMIT) + ms(PerfDiagnostics::Metric::PRESENT);
+		const double otherMs = std::max(0.0, sample.frameMs - accountedMs);
+		INFO_LOG(Log::System,
+			"PERF_FRAME sample=%zu ms=%.2f other=%.2f screen=%.2f emu=%.2f cpu=%.2f gpuBegin=%.2f gpuPrep=%.2f gpuEnd=%.2f "
+			"drawBegin=%.2f drawEnd=%.2f pace=%.2f present=%.2f "
+			"io=%.2f/ioMax=%.2f/ioN=%u/ioKB=%.1f cacheN=%u/cacheKB=%.1f iso=%.2f/isoN=%u chd=%.2f/chdMax=%.2f/chdN=%u "
+			"submitWait=%.2f/submitWaitMax=%.2f fence=%.2f/fenceMax=%.2f/fenceN=%u "
+			"acquire=%.2f/acquireMax=%.2f/acquireN=%u wsiPresent=%.2f/wsiPresentMax=%.2f "
+			"renderDesc=%.2f/renderSteps=%.2f/renderSubmit=%.2f shader=%.2f/shaderWait=%.2f pipe=%.2f/pipeWait=%.2f",
+			i, sample.frameMs, otherMs,
+			ms(PerfDiagnostics::Metric::SCREEN_RENDER), ms(PerfDiagnostics::Metric::EMULATION_FRAME),
+			ms(PerfDiagnostics::Metric::CPU_RUN_LOOP), ms(PerfDiagnostics::Metric::GPU_BEGIN_HOST_FRAME),
+			ms(PerfDiagnostics::Metric::GPU_PREPARE_DISPLAY), ms(PerfDiagnostics::Metric::GPU_END_HOST_FRAME),
+			ms(PerfDiagnostics::Metric::DRAW_BEGIN), ms(PerfDiagnostics::Metric::DRAW_END),
+			ms(PerfDiagnostics::Metric::POST_SUBMIT), ms(PerfDiagnostics::Metric::PRESENT),
+			ms(PerfDiagnostics::Metric::HOST_READ), hostRead.maxUs / 1000.0, hostRead.count, hostRead.work / 1024.0,
+			readAheadHit.count, readAheadHit.work / 1024.0,
+			ms(PerfDiagnostics::Metric::ISO_READ), isoRead.count,
+			ms(PerfDiagnostics::Metric::CHD_HUNK_READ), chdRead.maxUs / 1000.0, chdRead.count,
+			ms(PerfDiagnostics::Metric::RENDER_SUBMIT_WAIT), renderSubmitWait.maxUs / 1000.0,
+			ms(PerfDiagnostics::Metric::FRAME_FENCE_WAIT), fenceWait.maxUs / 1000.0, fenceWait.count,
+			ms(PerfDiagnostics::Metric::SWAPCHAIN_ACQUIRE), swapchainAcquire.maxUs / 1000.0, swapchainAcquire.count,
+			ms(PerfDiagnostics::Metric::SWAPCHAIN_PRESENT), swapchainPresent.maxUs / 1000.0,
+			ms(PerfDiagnostics::Metric::RENDER_DESCRIPTOR_FLUSH), ms(PerfDiagnostics::Metric::RENDER_STEPS),
+			ms(PerfDiagnostics::Metric::RENDER_QUEUE_SUBMIT),
+			ms(PerfDiagnostics::Metric::SHADER_MODULE), ms(PerfDiagnostics::Metric::SHADER_WAIT),
+			ms(PerfDiagnostics::Metric::PIPELINE_CREATE), ms(PerfDiagnostics::Metric::PIPELINE_WAIT));
+	}
+	slowFrameSampleCount = 0;
+	droppedSlowFrameSamples = 0;
+}
+#endif
 
 // This is called before NativeInit so we do a little bit of initialization here.
 void NativeGetAppInfo(std::string *app_dir_name, std::string *app_nice_name, bool *landscape, std::string *version) {
@@ -999,6 +1071,9 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 	}
 
 	double startTime = time_now_d();
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::BeginFrame();
+	#endif
 
 	ProcessWheelRelease(NKCODE_EXT_MOUSEWHEEL_UP, startTime, false);
 	ProcessWheelRelease(NKCODE_EXT_MOUSEWHEEL_DOWN, startTime, false);
@@ -1037,7 +1112,13 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 		debugFlags |= Draw::DebugFlags::PROFILE_TIMESTAMPS;
 	if (g_Config.bGpuLogProfiler)
 		debugFlags |= Draw::DebugFlags::PROFILE_SCOPES;
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double drawBeginStart = time_now_d();
+	#endif
 	g_draw->BeginFrame(debugFlags);
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::DRAW_BEGIN, time_now_d() - drawBeginStart);
+	#endif
 
 	g_screenManager->update();
 
@@ -1086,25 +1167,49 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 	g_screenManager->getUIContext()->SetTintSaturation(g_Config.fUITint, g_Config.fUISaturation);
 
 	// All actual rendering (and also emulation) happens in here.
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double screenRenderStart = time_now_d();
+	#endif
 	ScreenRenderFlags renderFlags = g_screenManager->render();
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::SCREEN_RENDER, time_now_d() - screenRenderStart);
+	#endif
 	if (g_screenManager->getUIContext()->Text()) {
 		g_screenManager->getUIContext()->Text()->OncePerFrame();
 	}
 
 	ui_draw2d.PopDrawMatrix();
 
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double drawEndStart = time_now_d();
+	#endif
 	g_draw->EndFrame();
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::DRAW_END, time_now_d() - drawEndStart);
+	#endif
 
 	// This, between EndFrame and Present, is where we should actually wait to do present time management.
 	// There might not be a meaningful distinction here for all backends..
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double postSubmitStart = time_now_d();
+	#endif
 	g_frameTiming.PostSubmit();
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::POST_SUBMIT, time_now_d() - postSubmitStart);
+	#endif
 
 	if (renderCounter < 10 && ++renderCounter == 10) {
 		// We're rendering fine, clear out failure info.
 		ClearFailedGPUBackends();
 	}
 
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double presentStart = time_now_d();
+	#endif
 	g_draw->Present(g_frameTiming.PresentMode());
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::PRESENT, time_now_d() - presentStart);
+	#endif
 
 	if (resized) {
 		INFO_LOG(Log::G3D, "Resized flag set - recalculating bounds");
@@ -1167,6 +1272,18 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 		}
 		lastTime = time_now_d();
 	}
+
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double frameMs = (time_now_d() - startTime) * 1000.0;
+	const bool perfDiagnosticsIsInGame = GetUIState() == UISTATE_INGAME;
+	if (frameMs >= 40.0 && perfDiagnosticsIsInGame) {
+		CaptureSlowFrame(frameMs);
+	}
+	if (perfDiagnosticsWasInGame && !perfDiagnosticsIsInGame) {
+		FlushSlowFrameSamples();
+	}
+	perfDiagnosticsWasInGame = perfDiagnosticsIsInGame;
+	#endif
 }
 
 bool HandleGlobalMessage(UIMessage message, const std::string &value) {
@@ -1472,6 +1589,9 @@ bool NativeIsRestarting() {
 }
 
 void NativeShutdown() {
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	FlushSlowFrameSamples();
+	#endif
 	INFO_LOG(Log::System, "NativeShutdown begin");
 
 	Achievements::Shutdown();

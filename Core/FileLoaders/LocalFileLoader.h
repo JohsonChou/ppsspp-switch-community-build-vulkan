@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <array>
+#include <memory>
 #include <mutex>
 
 #include "Common/CommonTypes.h"
@@ -42,6 +44,23 @@ public:
 	size_t ReadAt(s64 absolutePos, size_t bytes, size_t count, void *data, Flags flags = Flags::NONE) override;
 
 private:
+#if defined(__SWITCH__) && !defined(HAVE_LIBRETRO_VFS)
+	struct ReadAheadWindow {
+		std::unique_ptr<u8[]> data;
+		s64 start = -1;
+		size_t validBytes = 0;
+		u64 generation = 0;
+	};
+
+	static constexpr size_t READ_AHEAD_WINDOW_SIZE = 256 * 1024;
+	static constexpr size_t READ_AHEAD_WINDOW_COUNT = 16;
+
+	size_t ReadAtSwitch(s64 absolutePos, size_t bytes, void *data, Flags flags);
+	size_t ReadAtSwitchRaw(s64 absolutePos, size_t bytes, void *data);
+	ReadAheadWindow *FindReadAheadWindow(s64 absolutePos);
+	ReadAheadWindow *FillReadAheadWindow(s64 absolutePos);
+#endif
+
 #ifdef HAVE_LIBRETRO_VFS
 	FILE *file_ = nullptr;
 #elif !defined(_WIN32)
@@ -54,4 +73,10 @@ private:
 	Path filename_;
 	std::mutex readLock_;
 	bool isOpenedByFd_ = false;
+#if defined(__SWITCH__) && !defined(HAVE_LIBRETRO_VFS)
+	// Coalesce bursty PSP sector reads without adding another worker thread.
+	std::array<ReadAheadWindow, READ_AHEAD_WINDOW_COUNT> readAheadWindows_;
+	u64 readAheadGeneration_ = 0;
+	bool readAheadEnabled_ = false;
+#endif
 };

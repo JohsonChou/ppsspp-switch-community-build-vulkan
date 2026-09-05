@@ -231,9 +231,9 @@ Album/applet mode. Hold `R` while launching a retail title from the Homebrew
 Menu, then start PPSSPP in that title-takeover session. NXVK requires the full
 application memory allocation.
 
-Choosing Exit closes the title-takeover session and returns to the HOME Menu.
-This intentionally avoids returning to Sphaira because its current restore path
-can crash after an SDL audio homebrew application exits.
+Choosing Exit returns to the Homebrew Menu that launched PPSSPP. Update Sphaira
+to version 1.0.3 or newer if its homebrew-list restore path crashes while
+reloading invalid or oversized NRO icons.
 
 NetLoader and nxlink launching are not recommended for this release.
 

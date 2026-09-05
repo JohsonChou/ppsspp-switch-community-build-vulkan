@@ -27,6 +27,7 @@
 #include "Common/StringUtils.h"
 #include "Common/GPU/Vulkan/VulkanContext.h"
 #include "Common/Log.h"
+#include "Common/PerfDiagnostics.h"
 #include "Common/TimeUtil.h"
 #include "Common/GPU/Vulkan/VulkanMemory.h"
 
@@ -43,6 +44,9 @@
 // This always returns something, checking the return value for null is not meaningful.
 static Promise<VkShaderModule> *CompileShaderModuleAsync(VulkanContext *vulkan, VkShaderStageFlagBits stage, const char *code, std::string *tag) {
 	auto compile = [=] {
+		#if defined(SWITCH_PERF_DIAGNOSTICS)
+		const double start = time_now_d();
+		#endif
 		PROFILE_THIS_SCOPE("shadercomp");
 
 		std::string errorMessage;
@@ -86,17 +90,16 @@ static Promise<VkShaderModule> *CompileShaderModuleAsync(VulkanContext *vulkan, 
 #endif
 			delete tag;
 		}
+		#if defined(SWITCH_PERF_DIAGNOSTICS)
+		PerfDiagnostics::Record(PerfDiagnostics::Metric::SHADER_MODULE, time_now_d() - start);
+		#endif
 		return shaderModule;
 	};
 
-#if defined(_DEBUG)
-	// Debug allocator locking makes glslang parallelism pathological.
+#if defined(_DEBUG) || (PPSSPP_PLATFORM(SWITCH) && defined(SWITCH_USE_NXVK))
+	// Debug allocator locking makes glslang parallelism pathological. Switch
+	// newlib also lacks pthread_detach, so compile inline there.
 	return Promise<VkShaderModule>::AlreadyDone(compile());
-#elif PPSSPP_PLATFORM(SWITCH) && defined(SWITCH_USE_NXVK)
-	// Switch newlib does not provide pthread_detach(), so the normal dedicated
-	// task path cannot be used. Keep shader work off the emulation thread and
-	// separate from CPU_COMPUTE pipeline tasks, which wait for these promises.
-	return Promise<VkShaderModule>::Spawn(&g_threadManager, compile, TaskType::IO_BLOCKING, TaskPriority::HIGH);
 #else
 	return Promise<VkShaderModule>::Spawn(&g_threadManager, compile, TaskType::DEDICATED_THREAD);
 #endif

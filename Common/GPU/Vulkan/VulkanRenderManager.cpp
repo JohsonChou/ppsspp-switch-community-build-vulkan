@@ -4,6 +4,7 @@
 #include <sstream>
 
 #include "Common/Log.h"
+#include "Common/PerfDiagnostics.h"
 #include "Common/StringUtils.h"
 #include "Common/TimeUtil.h"
 
@@ -50,9 +51,15 @@ bool VKRGraphicsPipeline::Create(VulkanContext *vulkan, VkRenderPass compatibleR
 	}
 
 	// Fill in the last part of the desc since now it's time to block.
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double shaderWaitStart = time_now_d();
+	#endif
 	VkShaderModule vs = desc->vertexShader->BlockUntilReady();
 	VkShaderModule fs = desc->fragmentShader->BlockUntilReady();
 	VkShaderModule gs = desc->geometryShader ? desc->geometryShader->BlockUntilReady() : VK_NULL_HANDLE;
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::SHADER_WAIT, time_now_d() - shaderWaitStart);
+	#endif
 
 	if (!vs || !fs || (!gs && desc->geometryShader)) {
 		ERROR_LOG(Log::G3D, "Failed creating graphics pipeline - missing shader modules");
@@ -139,6 +146,9 @@ bool VKRGraphicsPipeline::Create(VulkanContext *vulkan, VkRenderPass compatibleR
 	double now = time_now_d();
 	double taken_ms_since_scheduling = (now - scheduleTime) * 1000.0;
 	double taken_ms = (now - start) * 1000.0;
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::PIPELINE_CREATE, now - start);
+	#endif
 
 #ifndef _DEBUG
 	if (taken_ms < 0.1) {
@@ -709,18 +719,30 @@ void VulkanRenderManager::BeginFrame(bool enableProfiling, bool enableLogProfile
 	// Makes sure the submission from the previous time around has happened. Otherwise
 	// we are not allowed to wait from another thread here..
 	if (useRenderThread_) {
+		#if defined(SWITCH_PERF_DIAGNOSTICS)
+		const double renderSubmitWaitStart = time_now_d();
+		#endif
 		std::unique_lock<std::mutex> lock(frameData.fenceMutex);
 		while (!frameData.readyForFence) {
 			frameData.fenceCondVar.wait(lock);
 		}
 		frameData.readyForFence = false;
+		#if defined(SWITCH_PERF_DIAGNOSTICS)
+		PerfDiagnostics::Record(PerfDiagnostics::Metric::RENDER_SUBMIT_WAIT, time_now_d() - renderSubmitWaitStart);
+		#endif
 	}
 
 	// This must be the very first Vulkan call we do in a new frame.
 	// Makes sure the very last command buffer from the frame before the previous has been fully executed.
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double fenceWaitStart = time_now_d();
+	#endif
 	if (vkWaitForFences(device, 1, &frameData.fence, true, UINT64_MAX) == VK_ERROR_DEVICE_LOST) {
 		_assert_msg_(false, "Device lost in vkWaitForFences");
 	}
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::FRAME_FENCE_WAIT, time_now_d() - fenceWaitStart);
+	#endif
 	vkResetFences(device, 1, &frameData.fence);
 
 	uint64_t frameId = frameIdGen_++;
@@ -1633,7 +1655,13 @@ void VulkanRenderManager::Run(VKRRenderThreadTask &task) {
 	if (!frameTimeHistory_[frameData.frameId].firstSubmit) {
 		frameTimeHistory_[frameData.frameId].firstSubmit = time_now_d();
 	}
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	double submitStart = time_now_d();
+	#endif
 	frameData.Submit(vulkan_, FrameSubmitType::Pending, frameDataShared_);
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::RENDER_QUEUE_SUBMIT, time_now_d() - submitStart);
+	#endif
 
 	if (!frameData.hasMainCommands) {
 		// Effectively resets both main and present command buffers, since they both live in this pool.
@@ -1650,6 +1678,10 @@ void VulkanRenderManager::Run(VKRRenderThreadTask &task) {
 	double descStart = time_now_d();
 	FlushDescriptors(task.frame);
 	frameData.profile.descWriteTime = time_now_d() - descStart;
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::RENDER_DESCRIPTOR_FLUSH, frameData.profile.descWriteTime);
+	const double renderStepsStart = time_now_d();
+	#endif
 
 	queueRunner_.PreprocessSteps(task.steps);
 	// Likely during shutdown, happens in headless.
@@ -1657,15 +1689,30 @@ void VulkanRenderManager::Run(VKRRenderThreadTask &task) {
 		frameData.skipSwap = true;
 	//queueRunner_.LogSteps(stepsOnThread, false);
 	queueRunner_.RunSteps(task.steps, task.frame, frameData, frameDataShared_);
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::RENDER_STEPS, time_now_d() - renderStepsStart);
+	#endif
 
 	switch (task.runType) {
 	case VKRRunType::SUBMIT:
+		#if defined(SWITCH_PERF_DIAGNOSTICS)
+		submitStart = time_now_d();
+		#endif
 		frameData.Submit(vulkan_, FrameSubmitType::FinishFrame, frameDataShared_);
+		#if defined(SWITCH_PERF_DIAGNOSTICS)
+		PerfDiagnostics::Record(PerfDiagnostics::Metric::RENDER_QUEUE_SUBMIT, time_now_d() - submitStart);
+		#endif
 		break;
 
 	case VKRRunType::SYNC:
 		// The submit will trigger the readbackFence, and also do the wait for it.
+		#if defined(SWITCH_PERF_DIAGNOSTICS)
+		submitStart = time_now_d();
+		#endif
 		frameData.Submit(vulkan_, FrameSubmitType::Sync, frameDataShared_);
+		#if defined(SWITCH_PERF_DIAGNOSTICS)
+		PerfDiagnostics::Record(PerfDiagnostics::Metric::RENDER_QUEUE_SUBMIT, time_now_d() - submitStart);
+		#endif
 
 		if (useRenderThread_) {
 			std::unique_lock<std::mutex> lock(syncMutex_);

@@ -18,7 +18,14 @@
 
 #include "ppsspp_config.h"
 
+#include <algorithm>
+#include <cerrno>
+#include <cstring>
+#include <limits>
+
 #include "Common/Log.h"
+#include "Common/PerfDiagnostics.h"
+#include "Common/TimeUtil.h"
 #include "Common/File/FileUtil.h"
 #include "Common/File/DirListing.h"
 #include "Core/Util/DarwinFileSystemServices.h"
@@ -128,6 +135,11 @@ LocalFileLoader::LocalFileLoader(const Path &filename)
 	filesize_ = end_offset.QuadPart;
 	SetFilePointerEx(handle_, zero, nullptr, FILE_BEGIN);
 #endif // _WIN32
+
+#if PPSSPP_PLATFORM(SWITCH) && !defined(HAVE_LIBRETRO_VFS)
+	const std::string extension = filename_.GetFileExtension();
+	readAheadEnabled_ = extension == ".iso" || extension == ".cso" || extension == ".chd";
+#endif
 }
 
 LocalFileLoader::~LocalFileLoader() {
@@ -196,9 +208,11 @@ size_t LocalFileLoader::ReadAt(s64 absolutePos, size_t bytes, size_t count, void
 	return fread(data, bytes, count, file_);
 #elif PPSSPP_PLATFORM(SWITCH)
 	// Toolchain has no fancy IO API.  We must lock.
+	if (absolutePos < 0 || count > std::numeric_limits<size_t>::max() / bytes) {
+		return 0;
+	}
 	std::lock_guard<std::mutex> guard(readLock_);
-	lseek(fd_, absolutePos, SEEK_SET);
-	return read(fd_, data, bytes * count) / bytes;
+	return ReadAtSwitch(absolutePos, bytes * count, data, flags) / bytes;
 #elif PPSSPP_PLATFORM(ANDROID)
 	// pread64 doesn't appear to actually be 64-bit safe, though such ISOs are uncommon.  See #10862.
 	if (absolutePos <= 0x7FFFFFFF) {
@@ -228,3 +242,113 @@ size_t LocalFileLoader::ReadAt(s64 absolutePos, size_t bytes, size_t count, void
 	return result == TRUE ? (size_t)read / bytes : -1;
 #endif
 }
+
+#if PPSSPP_PLATFORM(SWITCH) && !defined(HAVE_LIBRETRO_VFS)
+size_t LocalFileLoader::ReadAtSwitchRaw(s64 absolutePos, size_t bytes, void *data) {
+	if (absolutePos < 0 || static_cast<u64>(absolutePos) >= filesize_ || bytes == 0) {
+		return 0;
+	}
+
+	const size_t available = static_cast<size_t>(std::min<u64>(filesize_ - static_cast<u64>(absolutePos), bytes));
+#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double start = time_now_d();
+#endif
+	if (lseek(fd_, absolutePos, SEEK_SET) < 0) {
+#if defined(SWITCH_PERF_DIAGNOSTICS)
+		PerfDiagnostics::Record(PerfDiagnostics::Metric::HOST_READ, time_now_d() - start);
+#endif
+		return 0;
+	}
+
+	size_t totalRead = 0;
+	while (totalRead < available) {
+		const ssize_t result = read(fd_, static_cast<u8 *>(data) + totalRead, available - totalRead);
+		if (result > 0) {
+			totalRead += static_cast<size_t>(result);
+		} else if (result < 0 && errno == EINTR) {
+			continue;
+		} else {
+			break;
+		}
+	}
+#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::HOST_READ, time_now_d() - start, totalRead);
+#endif
+	return totalRead;
+}
+
+LocalFileLoader::ReadAheadWindow *LocalFileLoader::FindReadAheadWindow(s64 absolutePos) {
+	for (ReadAheadWindow &window : readAheadWindows_) {
+		if (window.start >= 0 && absolutePos >= window.start &&
+			static_cast<u64>(absolutePos - window.start) < window.validBytes) {
+			window.generation = ++readAheadGeneration_;
+			return &window;
+		}
+	}
+	return nullptr;
+}
+
+LocalFileLoader::ReadAheadWindow *LocalFileLoader::FillReadAheadWindow(s64 absolutePos) {
+	const s64 windowStart = absolutePos / static_cast<s64>(READ_AHEAD_WINDOW_SIZE) * static_cast<s64>(READ_AHEAD_WINDOW_SIZE);
+	ReadAheadWindow *target = nullptr;
+	for (ReadAheadWindow &window : readAheadWindows_) {
+		if (window.start < 0) {
+			target = &window;
+			break;
+		}
+		if (!target || window.generation < target->generation) {
+			target = &window;
+		}
+	}
+
+	if (!target->data) {
+		target->data = std::make_unique<u8[]>(READ_AHEAD_WINDOW_SIZE);
+	}
+	target->start = -1;
+	target->validBytes = ReadAtSwitchRaw(windowStart, READ_AHEAD_WINDOW_SIZE, target->data.get());
+	if (target->validBytes == 0) {
+		return nullptr;
+	}
+	target->start = windowStart;
+	target->generation = ++readAheadGeneration_;
+	return target;
+}
+
+size_t LocalFileLoader::ReadAtSwitch(s64 absolutePos, size_t bytes, void *data, Flags flags) {
+	if (absolutePos < 0 || static_cast<u64>(absolutePos) >= filesize_ || bytes == 0) {
+		return 0;
+	}
+
+	const size_t requested = static_cast<size_t>(std::min<u64>(filesize_ - static_cast<u64>(absolutePos), bytes));
+	if (!readAheadEnabled_ || flags == Flags::HINT_UNCACHED || requested > READ_AHEAD_WINDOW_SIZE) {
+		return ReadAtSwitchRaw(absolutePos, requested, data);
+	}
+
+	size_t totalRead = 0;
+	while (totalRead < requested) {
+		const s64 position = absolutePos + static_cast<s64>(totalRead);
+		ReadAheadWindow *window = FindReadAheadWindow(position);
+		const bool cacheHit = window != nullptr;
+		if (!window) {
+			window = FillReadAheadWindow(position);
+		}
+		if (!window) {
+			break;
+		}
+
+		const size_t windowOffset = static_cast<size_t>(position - window->start);
+		const size_t copyBytes = std::min(requested - totalRead, window->validBytes - windowOffset);
+		if (copyBytes == 0) {
+			break;
+		}
+		memcpy(static_cast<u8 *>(data) + totalRead, window->data.get() + windowOffset, copyBytes);
+#if defined(SWITCH_PERF_DIAGNOSTICS)
+		if (cacheHit) {
+			PerfDiagnostics::RecordWork(PerfDiagnostics::Metric::READ_AHEAD_HIT, copyBytes);
+		}
+#endif
+		totalRead += copyBytes;
+	}
+	return totalRead;
+}
+#endif

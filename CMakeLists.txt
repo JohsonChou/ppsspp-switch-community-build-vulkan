@@ -199,6 +199,7 @@ option(LIBRETRO "Set to ON to generate the libretro target" OFF)
 # :: Options
 option(USE_LIBNX "Set to ON to build for Switch(libnx)" OFF)
 option(SWITCH_USE_NXVK "Build the Switch frontend against NXVK and Zink" OFF)
+option(SWITCH_PERF_DIAGNOSTICS "Emit slow-event performance diagnostics in Switch NXVK builds" OFF)
 set(NXVK_PREFIX "" CACHE PATH "Staged NXVK portlib prefix")
 set(PPSSPP_GIT_VERSION_OVERRIDE "" CACHE STRING "Override the generated PPSSPP version string")
 
@@ -220,6 +221,9 @@ if(SWITCH_USE_NXVK)
 		message(FATAL_ERROR "SWITCH_USE_NXVK requires switch-libexpat (or libexpat.a in NXVK_PREFIX/lib)")
 	endif()
 	add_compile_definitions(SWITCH_USE_NXVK)
+	if(SWITCH_PERF_DIAGNOSTICS)
+		add_compile_definitions(SWITCH_PERF_DIAGNOSTICS)
+	endif()
 	include_directories(BEFORE "${NXVK_PREFIX}/include")
 endif()
 option(USE_FFMPEG "Build with FFMPEG support" ON)
@@ -705,6 +709,8 @@ add_library(Common STATIC
 	${CommonLOONGARCH64}
 	${CommonD3D}
 	${CommonVR}
+	Common/PerfDiagnostics.cpp
+	Common/PerfDiagnostics.h
 	Common/Serialize/Serializer.cpp
 	Common/Serialize/Serializer.h
 	Common/Serialize/SerializeDeque.h

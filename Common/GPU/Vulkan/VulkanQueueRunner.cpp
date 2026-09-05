@@ -4,6 +4,7 @@
 #include "Common/GPU/Vulkan/VulkanQueueRunner.h"
 #include "Common/GPU/Vulkan/VulkanRenderManager.h"
 #include "Common/Log.h"
+#include "Common/PerfDiagnostics.h"
 #include "Common/TimeUtil.h"
 
 using namespace PPSSPP_VK;
@@ -1093,7 +1094,13 @@ void VulkanQueueRunner::PerformRenderPass(const VKRStep &step, VkCommandBuffer c
 						graphicsPipeline->pipeline[(size_t)rpType] = Promise<VkPipeline>::CreateEmpty();
 						graphicsPipeline->Create(vulkan_, renderPass->Get(vulkan_, rpType, fbSampleCount), rpType, fbSampleCount, time_now_d(), -1);
 					}
+					#if defined(SWITCH_PERF_DIAGNOSTICS)
+					const double pipelineWaitStart = time_now_d();
+					#endif
 					pipeline = graphicsPipeline->pipeline[(size_t)rpType]->BlockUntilReady();
+					#if defined(SWITCH_PERF_DIAGNOSTICS)
+					PerfDiagnostics::Record(PerfDiagnostics::Metric::PIPELINE_WAIT, time_now_d() - pipelineWaitStart);
+					#endif
 				}
 
 				if (pipeline != VK_NULL_HANDLE) {

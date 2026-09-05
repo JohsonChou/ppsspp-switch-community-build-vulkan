@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 #include "Common/Data/Text/I18n.h"
@@ -27,7 +28,9 @@
 #include "Common/Data/Text/Parsers.h"
 #include "Common/File/FileUtil.h"
 #include "Common/File/DirListing.h"
+#include "Common/PerfDiagnostics.h"
 #include "Common/StringUtils.h"
+#include "Common/TimeUtil.h"
 #include "Core/Loaders.h"
 #include "Core/FileSystems/BlockDevices.h"
 #include "Core/FileSystems/ISOFileSystem.h"
@@ -301,7 +304,13 @@ FileBlockDevice::~FileBlockDevice() {}
 
 bool FileBlockDevice::ReadBlock(int blockNumber, u8 *outPtr, bool uncached) {
 	FileLoader::Flags flags = uncached ? FileLoader::Flags::HINT_UNCACHED : FileLoader::Flags::NONE;
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double start = time_now_d();
+	#endif
 	size_t retval = fileLoader_->ReadAt((u64)blockNumber * (u64)GetBlockSize(), 1, 2048, outPtr, flags);
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::ISO_READ, time_now_d() - start, retval);
+	#endif
 	if (retval != 2048) {
 		DEBUG_LOG(Log::FileSystem, "Could not read 2048 byte block, at block offset %d. Only got %d bytes", blockNumber, (int)retval);
 		return false;
@@ -310,7 +319,13 @@ bool FileBlockDevice::ReadBlock(int blockNumber, u8 *outPtr, bool uncached) {
 }
 
 bool FileBlockDevice::ReadBlocks(u32 minBlock, int count, u8 *outPtr) {
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	const double start = time_now_d();
+	#endif
 	size_t retval = fileLoader_->ReadAt((u64)minBlock * (u64)GetBlockSize(), 2048, count, outPtr);
+	#if defined(SWITCH_PERF_DIAGNOSTICS)
+	PerfDiagnostics::Record(PerfDiagnostics::Metric::ISO_READ, time_now_d() - start, retval * GetBlockSize());
+	#endif
 	if (retval != (size_t)count) {
 		ERROR_LOG(Log::FileSystem, "Could not read %d blocks, at block offset %d. Only got %d blocks", count, minBlock, (int)retval);
 		return false;
@@ -988,13 +1003,17 @@ CHDFileBlockDevice::CHDFileBlockDevice(FileLoader *fileLoader)
 		}
 		return 0;
 	};
-	core_file_->core.fread = [](void *out_data, size_t size, size_t count, core_file *file) {
+	core_file_->core.fread = [](void *out_data, size_t size, size_t count, core_file *file) -> size_t {
 		ExtendedCoreFile *coreFile = (ExtendedCoreFile *)file;
 		FileLoader *loader = (FileLoader *)file->argp;
-		uint64_t totalSize = size * count;
-		loader->ReadAt(coreFile->seekPos, totalSize, out_data);
-		coreFile->seekPos += totalSize;
-		return size * count;
+		if (size == 0 || count == 0 || count > std::numeric_limits<size_t>::max() / size ||
+			coreFile->seekPos > static_cast<uint64_t>(std::numeric_limits<s64>::max())) {
+			return 0;
+		}
+		const size_t totalSize = size * count;
+		const size_t bytesRead = loader->ReadAt(static_cast<s64>(coreFile->seekPos), totalSize, out_data);
+		coreFile->seekPos += bytesRead;
+		return bytesRead / size;
 	};
 	core_file_->core.fclose = [](core_file *file) {
 		ExtendedCoreFile *coreFile = (ExtendedCoreFile *)file;
@@ -1091,7 +1110,13 @@ bool CHDFileBlockDevice::ReadBlock(int blockNumber, u8 *outPtr, bool uncached) {
 	u32 blockInHunk = blockNumber % blocksPerHunk;
 
 	if (currentHunk != hunk) {
+		#if defined(SWITCH_PERF_DIAGNOSTICS)
+		const double start = time_now_d();
+		#endif
 		chd_error err = chd_read(impl_->chd, hunk, readBuffer);
+		#if defined(SWITCH_PERF_DIAGNOSTICS)
+		PerfDiagnostics::Record(PerfDiagnostics::Metric::CHD_HUNK_READ, time_now_d() - start, impl_->header->hunkbytes);
+		#endif
 		if (err != CHDERR_NONE) {
 			ERROR_LOG(Log::Loader, "CHD read failed: %d %d %s", blockNumber, hunk, chd_error_string(err));
 			NotifyReadError();

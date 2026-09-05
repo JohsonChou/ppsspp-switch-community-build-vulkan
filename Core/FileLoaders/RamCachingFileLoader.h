@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <limits>
 #include <vector>
 #include <mutex>
 #include <thread>
@@ -35,6 +36,9 @@ public:
 	s64 FileSize() override;
 
 	size_t ReadAt(s64 absolutePos, size_t bytes, size_t count, void *data, Flags flags = Flags::NONE) override {
+		if (bytes == 0 || count > std::numeric_limits<size_t>::max() / bytes) {
+			return 0;
+		}
 		return ReadAt(absolutePos, bytes * count, data, flags) / bytes;
 	}
 	size_t ReadAt(s64 absolutePos, size_t bytes, void *data, Flags flags = Flags::NONE) override;
@@ -45,8 +49,7 @@ private:
 	void InitCache();
 	void ShutdownCache();
 	size_t ReadFromCache(s64 pos, size_t bytes, void *data);
-	// Guaranteed to read at least one block into the cache.
-	void SaveIntoCache(s64 pos, size_t bytes, Flags flags);
+	bool SaveIntoCache(s64 pos, size_t bytes, Flags flags);
 	void StartReadAhead(s64 pos);
 	u32 NextAheadBlock();
 
@@ -64,6 +67,9 @@ private:
 
 	std::vector<u8> blocks_;
 	std::mutex blocksMutex_;
+	// Serialize writers; blocksMutex_ publishes completed cache blocks to readers.
+	std::mutex fillMutex_;
+	std::mutex threadMutex_;
 	u32 aheadRemaining_ = 0;
 	s64 aheadPos_ = 0;
 	std::thread aheadThread_;
