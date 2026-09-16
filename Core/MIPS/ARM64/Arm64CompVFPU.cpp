@@ -215,6 +215,13 @@ namespace MIPSComp {
 		case 50: //lv.s  // VI(vt) = Memory::Read_U32(addr);
 		{
 			if (!gpr.IsImm(rs) && jo.cachePointers && g_Config.bFastMemory && (offset & 3) == 0 && offset >= 0 && offset < 16384) {
+				if (jo.enablePointerify) {
+					gpr.MapRegAsPointer(rs);
+					fpr.MapRegV(vt, MAP_NOINIT | MAP_DIRTY);
+					fp.LDR(32, INDEX_UNSIGNED, fpr.V(vt), gpr.RPtr(rs), offset);
+					break;
+				}
+
 				gpr.MapReg(rs);
 				gpr.SpillLock(rs);
 				ARM64Reg allfixSavedRs = gpr.GetAndLockTempR();
@@ -259,6 +266,13 @@ namespace MIPSComp {
 		case 58: //sv.s   // Memory::Write_U32(VI(vt), addr);
 		{
 			if (!gpr.IsImm(rs) && jo.cachePointers && g_Config.bFastMemory && (offset & 3) == 0 && offset >= 0 && offset < 16384) {
+				if (jo.enablePointerify) {
+					gpr.MapRegAsPointer(rs);
+					fpr.MapRegV(vt, 0);
+					fp.STR(32, INDEX_UNSIGNED, fpr.V(vt), gpr.RPtr(rs), offset);
+					break;
+				}
+
 				gpr.MapReg(rs);
 				gpr.SpillLock(rs);
 				ARM64Reg allfixSavedRs = gpr.GetAndLockTempR();

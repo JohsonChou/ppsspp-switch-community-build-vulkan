@@ -91,6 +91,15 @@ void Arm64Jit::Comp_FPULS(MIPSOpcode op)
 	switch (op >> 26) {
 	case 49: //FI(ft) = Memory::Read_U32(addr); break; //lwc1
 		if (!gpr.IsImm(rs) && jo.cachePointers && g_Config.bFastMemory && (offset & 3) == 0 && offset <= 16380 && offset >= 0) {
+			// Pointerification only replaces the upper bits, so the cached 32-bit
+			// PSP value remains intact and must keep its pointerified metadata.
+			if (jo.enablePointerify) {
+				gpr.MapRegAsPointer(rs);
+				fpr.MapReg(ft, MAP_NOINIT | MAP_DIRTY);
+				fp.LDR(32, INDEX_UNSIGNED, fpr.R(ft), gpr.RPtr(rs), offset);
+				break;
+			}
+
 			gpr.MapReg(rs);
 			gpr.SpillLock(rs);
 			ARM64Reg allfixSavedRs = gpr.GetAndLockTempR();
@@ -134,6 +143,13 @@ void Arm64Jit::Comp_FPULS(MIPSOpcode op)
 
 	case 57: //Memory::Write_U32(FI(ft), addr); break; //swc1
 		if (!gpr.IsImm(rs) && jo.cachePointers && g_Config.bFastMemory && (offset & 3) == 0 && offset <= 16380 && offset >= 0) {
+			if (jo.enablePointerify) {
+				gpr.MapRegAsPointer(rs);
+				fpr.MapReg(ft, 0);
+				fp.STR(32, INDEX_UNSIGNED, fpr.R(ft), gpr.RPtr(rs), offset);
+				break;
+			}
+
 			gpr.MapReg(rs);
 			gpr.SpillLock(rs);
 			ARM64Reg allfixSavedRs = gpr.GetAndLockTempR();

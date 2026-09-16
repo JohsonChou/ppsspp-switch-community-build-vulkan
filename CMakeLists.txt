@@ -2972,11 +2972,6 @@ set(NativeAssets
 	assets/Roboto_Condensed-Bold.ttf
 	assets/Roboto_Condensed-Italic.ttf
 	assets/Inconsolata-Regular.ttf
-	assets/NotoSansCJKjp-VF.ttf
-	assets/NotoSansArabic-Regular.ttf
-	assets/NotoSansHebrew-Regular.ttf
-	assets/NotoSansThai-Regular.ttf
-	assets/NotoSansLao-Regular.ttf
 	assets/compat.ini
 	assets/adhoc-servers.json
 	assets/infra-dns.json
@@ -2992,6 +2987,19 @@ set(NativeAssets
 	assets/sfx_achievement_unlocked.wav
 	assets/sfx_leaderbord_submitted.wav
 )
+
+# These generated build inputs are fetched by scripts/fetch-switch-fonts.py.
+# Keep them out of the unconditional asset list so a fresh non-Switch checkout
+# can still configure without downloading Switch-only release assets.
+if(USE_LIBNX)
+	list(APPEND NativeAssets
+		assets/NotoSansCJKjp-VF.ttf
+		assets/NotoSansArabic-Regular.ttf
+		assets/NotoSansHebrew-Regular.ttf
+		assets/NotoSansThai-Regular.ttf
+		assets/NotoSansLao-Regular.ttf
+	)
+endif()
 
 file(GLOB UIImages CONFIGURE_DEPENDS
     assets/ui_images/*.png
