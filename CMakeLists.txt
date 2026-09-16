@@ -2972,6 +2972,11 @@ set(NativeAssets
 	assets/Roboto_Condensed-Bold.ttf
 	assets/Roboto_Condensed-Italic.ttf
 	assets/Inconsolata-Regular.ttf
+	assets/NotoSansCJKjp-VF.ttf
+	assets/NotoSansArabic-Regular.ttf
+	assets/NotoSansHebrew-Regular.ttf
+	assets/NotoSansThai-Regular.ttf
+	assets/NotoSansLao-Regular.ttf
 	assets/compat.ini
 	assets/adhoc-servers.json
 	assets/infra-dns.json

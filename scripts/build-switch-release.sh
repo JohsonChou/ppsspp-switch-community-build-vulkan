@@ -107,6 +107,10 @@ git submodule sync --recursive
 git submodule update --init --recursive
 
 echo
+echo "=== FETCHING MULTILINGUAL FALLBACK FONTS ==="
+python3 "$ROOT/scripts/fetch-switch-fonts.py"
+
+echo
 echo "=== VERIFYING FFMPEG REVISION ==="
 
 EXPECTED_FFMPEG_COMMIT="82049cca2e4c1516ed00a77b502a21f91b7843f4"
@@ -344,8 +348,8 @@ ASSET_COUNT="$(find "$APP_DIR/assets" -type f | wc -l | tr -d ' ')"
 
 echo "Packaged asset files: $ASSET_COUNT"
 
-if [ "$ASSET_COUNT" -ne 185 ]; then
-  echo "ERROR: Expected 185 generated asset files."
+if [ "$ASSET_COUNT" -ne 190 ]; then
+  echo "ERROR: Expected 190 generated asset files."
   return 1 2>/dev/null || false
 fi
 
