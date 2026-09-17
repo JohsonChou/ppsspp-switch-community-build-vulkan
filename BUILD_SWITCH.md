@@ -1,4 +1,4 @@
-# PPSSPP Switch Community Build v0.7.2
+# PPSSPP Switch Community Build v0.7.3
 
 Build instructions for the Nintendo Switch community build based on PPSSPP v1.20.4.
 
@@ -48,7 +48,7 @@ Clone the repository and select the release branch:
 
     git clone --recursive https://github.com/JohsonChou/ppsspp-switch-community-build-vulkan.git ppsspp-switch-community-build
     cd ppsspp-switch-community-build
-    git switch release-v0.7.2
+    git switch release-v0.7.3
 
 For an existing clone:
 
@@ -77,8 +77,8 @@ Run from the repository root:
 
 Generated files:
 
-    dist/v0.7.2/PPSSPP-Switch-Community-Build-v0.7.2.zip
-    dist/v0.7.2/PPSSPP-Switch-Community-Build-v0.7.2.zip.sha256
+    dist/v0.7.3/PPSSPP-Switch-Community-Build-v0.7.3.zip
+    dist/v0.7.3/PPSSPP-Switch-Community-Build-v0.7.3.zip.sha256
 
 The ZIP archive contains:
 
@@ -172,7 +172,7 @@ Run from the repository root:
 
     cmake \
       -S . \
-      -B build-switch-v0.7.2 \
+      -B build-switch-v0.7.3 \
       -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Switch.cmake \
@@ -180,7 +180,7 @@ Run from the repository root:
       -DUSE_LIBNX=ON \
       -DSWITCH_USE_NXVK=ON \
       -DNXVK_PREFIX="$PWD/build-switch-nxvk-prefix" \
-      -DPPSSPP_GIT_VERSION_OVERRIDE=v0.7.2 \
+      -DPPSSPP_GIT_VERSION_OVERRIDE=v0.7.3 \
       -DUSING_EGL=ON \
       -DUSING_GLES2=ON \
       -DUSING_FBDEV=ON \
@@ -200,31 +200,31 @@ Run from the repository root:
 
 ### 7. Compile PPSSPP
 
-    cmake --build build-switch-v0.7.2 --parallel 2
+    cmake --build build-switch-v0.7.3 --parallel 2
 
 Expected executable:
 
-    build-switch-v0.7.2/PPSSPPSDL.elf
+    build-switch-v0.7.3/PPSSPPSDL.elf
 
 Expected generated assets:
 
-    build-switch-v0.7.2/assets/
+    build-switch-v0.7.3/assets/
 
 ### 8. Generate Homebrew Metadata
 
     /opt/devkitpro/tools/bin/nacptool --create \
       "PPSSPP Switch Community Build" \
       "SirSamael" \
-      "0.7.2" \
-      build-switch-v0.7.2/PPSSPP.nacp
+      "0.7.3" \
+      build-switch-v0.7.3/PPSSPP.nacp
 
 ### 9. Generate the NRO
 
     /opt/devkitpro/tools/bin/elf2nro \
-      build-switch-v0.7.2/PPSSPPSDL.elf \
-      build-switch-v0.7.2/PPSSPP.nro \
+      build-switch-v0.7.3/PPSSPPSDL.elf \
+      build-switch-v0.7.3/PPSSPP.nro \
       --icon=icons/PPSSPP-icon.jpg \
-      --nacp=build-switch-v0.7.2/PPSSPP.nacp
+      --nacp=build-switch-v0.7.3/PPSSPP.nacp
 
 ## SD Card Installation
 

@@ -1,3 +1,25 @@
+# v0.7.3
+
+Maintenance release based on PPSSPP v1.20.4 and the v0.7.2 Switch Vulkan
+release.
+
+## Switch Integration
+
+- Integrated the Switch font, ARM64 JIT and memory, controller input, and
+  software depth-raster improvements from the v0.6.5 release line.
+- Added verified release-time fetching for the Noto CJK, Arabic, Hebrew, Thai,
+  and Lao fonts instead of storing the binaries in Git.
+
+## Review Fixes
+
+- Preserved ARM64 pointerified register-cache state in the FPU and VFPU
+  fast-memory paths.
+- Scoped the fetched Noto assets to Switch builds so fresh non-Switch
+  checkouts can configure without downloading Switch release assets.
+- Bumped the Switch release metadata and artifact version to `0.7.3`.
+
+---
+
 # v0.7.2
 
 Maintenance release based on PPSSPP v1.20.4 and the v0.7.1 texture-cache

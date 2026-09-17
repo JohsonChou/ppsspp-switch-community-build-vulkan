@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-VERSION="0.7.2"
+VERSION="0.7.3"
 RELEASE_NAME="PPSSPP-Switch-Community-Build-v${VERSION}"
 
 BUILD="$ROOT/build-switch-v${VERSION}"
