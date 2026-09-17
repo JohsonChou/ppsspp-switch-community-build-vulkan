@@ -108,6 +108,15 @@ imgui.ini
 ui_atlas_gen.png
 buttons_rasterized.png
 
+# Switch multilingual fallback fonts are fetched from the pinned upstream
+# v0.6.5 revision by scripts/fetch-switch-fonts.py.  Keeping these generated
+# inputs out of Git allows text-only pull requests in Codex Cloud.
+/assets/NotoSansArabic-Regular.ttf
+/assets/NotoSansCJKjp-VF.ttf
+/assets/NotoSansHebrew-Regular.ttf
+/assets/NotoSansLao-Regular.ttf
+/assets/NotoSansThai-Regular.ttf
+
 # For vim
 *.swp
 tags

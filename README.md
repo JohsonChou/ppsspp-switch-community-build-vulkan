@@ -76,6 +76,19 @@ These changes fixed:
 - Gran Turismo's per-character menu texture updates no longer force redundant
   hashes within the same GE synchronization domain
 
+### Upstream v0.6.5 Features
+
+This release incorporates the Switch-specific work from upstream v0.6.5:
+
+- ARM64 FPU/VFPU JIT cache-pointer preservation and IR/JIT crash-path fixes
+- Readable source-alias tracking for Switch memory mappings
+- Parallel, non-overlapping software depth rasterization
+- Correct SDL trigger mapping and right-stick diagonal handling
+- Native multilingual Switch software-keyboard support
+- CJK, Arabic, Hebrew, Thai, and Lao fallback fonts
+- Correct video swizzle-buffer initialization and ownership
+- Correct handling of negative OpenGL ES render-target offsets
+
 ### Reproducible Build System
 
 The repository includes scripts for:

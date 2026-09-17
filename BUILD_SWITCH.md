@@ -60,14 +60,16 @@ For an existing clone:
 The automated script performs the complete process:
 
 1. Initializes all Git submodules.
-2. Verifies the pinned FFmpeg revision.
-3. Applies the required Switch submodule patches.
-4. Builds FFmpeg 57 into an isolated local prefix.
-5. Builds pinned NXVK plus the Zink OpenGL ES alternate renderer into a local prefix.
-6. Configures and compiles PPSSPP.
-7. Generates the NACP metadata and NRO.
-8. Copies the generated 185-file asset set.
-9. Creates the SD-card ZIP and SHA-256 checksum.
+2. Downloads and SHA-256 verifies the multilingual fonts from the pinned
+   upstream v0.6.5 revision.
+3. Verifies the pinned FFmpeg revision.
+4. Applies the required Switch submodule patches.
+5. Builds FFmpeg 57 into an isolated local prefix.
+6. Builds pinned NXVK plus the Zink OpenGL ES alternate renderer into a local prefix.
+7. Configures and compiles PPSSPP.
+8. Generates the NACP metadata and NRO.
+9. Copies the generated 190-file asset set.
+10. Creates the SD-card ZIP and SHA-256 checksum.
 
 Run from the repository root:
 
@@ -97,7 +99,17 @@ clean or contain only the exact documented Switch patches.
     git submodule sync --recursive
     git submodule update --init --recursive
 
-### 2. Apply Switch Submodule Patches
+### 2. Fetch Multilingual Fallback Fonts
+
+The font binaries are generated build inputs and are intentionally not stored
+in Git. Download the exact files from the pinned upstream v0.6.5 revision and
+verify their SHA-256 hashes before configuring:
+
+    python3 scripts/fetch-switch-fonts.py
+
+The automated release script performs this step automatically.
+
+### 3. Apply Switch Submodule Patches
 
 Run these commands from the repository root:
 
@@ -108,7 +120,7 @@ Run these commands from the repository root:
 
 Before applying a patch again, check whether it is already applied.
 
-### 3. Build the Isolated FFmpeg Libraries
+### 4. Build the Isolated FFmpeg Libraries
 
     JOBS=2 ./scripts/build-switch-ffmpeg57.sh
 
@@ -127,7 +139,7 @@ Required static libraries:
 
 The script does not overwrite the libraries installed under devkitPro.
 
-### 4. Build NXVK and Zink
+### 5. Build NXVK and Zink
 
 The pinned `ext/nxvk` submodule builds Vulkan and the OpenGL ES Zink alternate renderer
 inside its container. The release script stages its output automatically. For a
@@ -154,7 +166,7 @@ The staged prefix must retain `lib/pkgconfig/nxvk-gl.pc`; CMake verifies this
 NXVK portlib manifest is present. The release script also verifies the pinned
 NXVK commit before building.
 
-### 5. Configure PPSSPP
+### 6. Configure PPSSPP
 
 Run from the repository root:
 
@@ -186,7 +198,7 @@ Run from the repository root:
       -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON \
       -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-### 6. Compile PPSSPP
+### 7. Compile PPSSPP
 
     cmake --build build-switch-v0.7.2 --parallel 2
 
@@ -198,7 +210,7 @@ Expected generated assets:
 
     build-switch-v0.7.2/assets/
 
-### 7. Generate Homebrew Metadata
+### 8. Generate Homebrew Metadata
 
     /opt/devkitpro/tools/bin/nacptool --create \
       "PPSSPP Switch Community Build" \
@@ -206,7 +218,7 @@ Expected generated assets:
       "0.7.2" \
       build-switch-v0.7.2/PPSSPP.nacp
 
-### 8. Generate the NRO
+### 9. Generate the NRO
 
     /opt/devkitpro/tools/bin/elf2nro \
       build-switch-v0.7.2/PPSSPPSDL.elf \
